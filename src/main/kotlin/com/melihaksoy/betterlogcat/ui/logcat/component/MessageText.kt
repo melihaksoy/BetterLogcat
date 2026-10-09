@@ -106,12 +106,7 @@ data class KeywordHighlighter(val rules: List<HighlightRule>) {
 /** Labels shown inside message text. Passed in because they come from the message bundle. */
 @Immutable
 data class MessageLabels(
-    val moreLines: (Int) -> String,
-    val json: (String) -> String,
-    val more: (String) -> String,
     val showAll: (Int, String) -> String,
-    val copyJson: String = "",
-    val openInEditor: String = "",
 )
 
 private const val JSON_PREVIEW_CHARS = 110
@@ -130,8 +125,6 @@ internal fun buildMessageText(
     onOpenFrame: (StackFrame) -> Unit,
     onOpenUrl: (String) -> Unit,
     onShowAll: () -> Unit,
-    onCopyJson: () -> Unit = {},
-    onOpenInEditor: () -> Unit = {},
 ): AnnotatedString {
     val text = buildAnnotatedString {
         val append = { part: String ->
@@ -172,8 +165,6 @@ internal fun buildMessageText(
                 append = append,
                 appendJsonPart = appendJsonPart,
                 onOpenUrl = onOpenUrl,
-                onCopyJson = onCopyJson,
-                onOpenInEditor = onOpenInEditor,
             )
         }
     }
@@ -234,8 +225,6 @@ private fun AnnotatedString.Builder.appendCollapsed(
     append: (String) -> Unit,
     appendJsonPart: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
-    onCopyJson: () -> Unit,
-    onOpenInEditor: () -> Unit,
 ) {
     val firstLine = entry.lines.first()
     val json = entry.json as? JsonContent.Found
@@ -254,36 +243,6 @@ private fun AnnotatedString.Builder.appendCollapsed(
         append(" ")
         val preview = json.main.minified
         appendJsonPart(if (preview.length > JSON_PREVIEW_CHARS) preview.take(JSON_PREVIEW_CHARS) + "…" else preview)
-        appendMuted(
-            text = "  " + labels.json(sizeLabel(chars = json.main.raw.length)),
-            colors = colors,
-        )
-        // One click to copy or open the body: no scrolling through hundreds of lines.
-        if (labels.copyJson.isNotEmpty()) {
-            append("  ")
-            appendAction(
-                text = labels.copyJson,
-                colors = colors,
-                onClick = onCopyJson,
-            )
-        }
-        if (labels.openInEditor.isNotEmpty()) {
-            append("  ")
-            appendAction(
-                text = labels.openInEditor,
-                colors = colors,
-                onClick = onOpenInEditor,
-            )
-        }
-    } else {
-        val hidden = when {
-            entry.lines.size > 1 -> labels.moreLines(entry.lines.size - 1)
-            else -> labels.more(sizeLabel(chars = entry.message.length - TEXT_PREVIEW_CHARS))
-        }
-        appendMuted(
-            text = "  " + hidden,
-            colors = colors,
-        )
     }
 }
 
@@ -331,8 +290,6 @@ private fun capped(
     }
 }
 
-private const val ACTION_TINT = 0.14f
-private const val ACTION_TINT_HOVER = 0.28f
 private const val MAX_EXPANDED_LINES = 2_000
 private const val MAX_EXPANDED_CHARS = 300_000
 private const val URL_SEARCH_CHARS = 2_000
@@ -373,32 +330,6 @@ private fun AnnotatedString.Builder.appendJson(
             start = start + range.first,
             end = start + range.last + 1,
         )
-    }
-}
-
-private fun AnnotatedString.Builder.appendAction(
-    text: String,
-    colors: LogColors,
-    onClick: () -> Unit,
-) {
-    // Button-like: bold on a tint, no underline, so it never looks like a web link in the message.
-    withLink(
-        link = LinkAnnotation.Clickable(
-            tag = "action",
-            styles = TextLinkStyles(
-                style = SpanStyle(
-                    color = colors.link,
-                    fontWeight = FontWeight.SemiBold,
-                    background = colors.link.copy(alpha = ACTION_TINT),
-                ),
-                hoveredStyle = SpanStyle(background = colors.link.copy(alpha = ACTION_TINT_HOVER)),
-            ),
-            linkInteractionListener = { onClick() },
-        ),
-    ) {
-        append("\u2009")
-        append(text)
-        append("\u2009")
     }
 }
 

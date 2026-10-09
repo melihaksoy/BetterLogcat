@@ -93,9 +93,6 @@ class KtorJsonTest {
     }
 
     private val labels = MessageLabels(
-        moreLines = { "+$it lines" },
-        json = { "JSON · $it" },
-        more = { "$it more" },
         showAll = { lines, _ -> "Show all $lines lines" },
     )
 

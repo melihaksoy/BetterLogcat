@@ -145,6 +145,7 @@ internal fun LogRow(
                 onShowAll = onShowAll,
                 onCopyJson = onCopyJson,
                 onOpenInEditor = onOpenInEditor,
+                onToggleExpanded = onToggleExpanded,
             )
         }
     } else {
@@ -183,6 +184,7 @@ internal fun LogRow(
                 onShowAll = onShowAll,
                 onCopyJson = onCopyJson,
                 onOpenInEditor = onOpenInEditor,
+                onToggleExpanded = onToggleExpanded,
             )
         }
     }
@@ -394,6 +396,7 @@ private fun MessageCell(
     onShowAll: () -> Unit,
     onCopyJson: () -> Unit,
     onOpenInEditor: () -> Unit,
+    onToggleExpanded: () -> Unit,
 ) {
     val currentOnShowAll by rememberUpdatedState(newValue = onShowAll)
     val currentOnCopyJson by rememberUpdatedState(newValue = onCopyJson)
@@ -417,27 +420,36 @@ private fun MessageCell(
             onOpenFrame = { currentOnOpenFrame(it) },
             onOpenUrl = { BrowserUtil.browse(it) },
             onShowAll = { currentOnShowAll() },
-            onCopyJson = { currentOnCopyJson() },
-            onOpenInEditor = { currentOnOpenInEditor() },
         )
     }
-    if (isTextSelecting) {
-        // Free text selection: drag to select part of the message; Cmd/Ctrl+C copies only that.
-        SelectableText(
-            modifier = modifier,
-            text = text,
-            color = JewelTheme.globalColors.text.normal,
-            textStyle = textStyle,
-            colors = colors,
-        )
-    } else {
-        Text(
-            text = text,
-            modifier = modifier,
-            style = textStyle,
-            softWrap = !isSingleLine,
-            overflow = if (isSingleLine) TextOverflow.Clip else TextOverflow.Visible,
-        )
+    Column(modifier = modifier) {
+        if (isTextSelecting) {
+            // Free text selection: drag to select part of the message; Cmd/Ctrl+C copies only that.
+            SelectableText(
+                text = text,
+                color = JewelTheme.globalColors.text.normal,
+                textStyle = textStyle,
+                colors = colors,
+            )
+        } else {
+            Text(
+                text = text,
+                style = textStyle,
+                softWrap = !isSingleLine,
+                overflow = if (isSingleLine) TextOverflow.Clip else TextOverflow.Visible,
+            )
+        }
+        // Split big messages continue below this row; their sticky header carries the same actions.
+        if (entry.isExpandable && !isTextSelecting && textOverride == null) {
+            MessageFooter(
+                entry = entry,
+                isExpanded = isExpanded,
+                colors = colors,
+                onCopyJson = currentOnCopyJson,
+                onOpenInEditor = currentOnOpenInEditor,
+                onToggleExpanded = onToggleExpanded,
+            )
+        }
     }
 }
 
@@ -464,12 +476,7 @@ private fun defaultMessageColor(
 }
 
 internal fun messageLabels(): MessageLabels = MessageLabels(
-    moreLines = { count -> BetterLogcatBundle.message("row.moreLines", count) },
-    json = { size -> BetterLogcatBundle.message("row.json", size) },
-    more = { size -> BetterLogcatBundle.message("row.more", size) },
     showAll = { lines, size -> BetterLogcatBundle.message("row.showAll", lines, size) },
-    copyJson = BetterLogcatBundle.message("row.copyJson"),
-    openInEditor = BetterLogcatBundle.message("row.open"),
 )
 
 /**
