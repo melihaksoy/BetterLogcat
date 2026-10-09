@@ -6,7 +6,7 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -42,13 +42,15 @@ internal fun MessageFooter(
     onToggleExpanded: () -> Unit,
 ) {
     val json = entry.json as? JsonContent.Found
-    Row(
+    // Chips move to the next line in a narrow column; their text never breaks.
+    FlowRow(
         modifier = modifier.padding(
             top = 2.dp,
             bottom = 2.dp,
         ),
-        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(space = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(space = 4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         val info = when {
             json != null -> BetterLogcatBundle.message("footer.json", sizeText(chars = json.main.raw.length))
@@ -96,6 +98,8 @@ private fun InfoChip(
                 vertical = 1.dp,
             ),
         color = colors.muted,
+        maxLines = 1,
+        softWrap = false,
     )
 }
 
@@ -126,6 +130,8 @@ private fun ActionChip(
             ),
         color = colors.link,
         fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
+        softWrap = false,
     )
 }
 
