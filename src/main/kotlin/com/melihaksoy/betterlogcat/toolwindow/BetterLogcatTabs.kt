@@ -13,6 +13,10 @@ import com.intellij.ui.content.ContentManagerEvent
 import com.intellij.ui.content.ContentManagerListener
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
 import com.melihaksoy.betterlogcat.ide.BetterLogcatProjectService
+import kotlinx.coroutines.delay
+import com.melihaksoy.betterlogcat.ide.TabLayoutStore
+import com.melihaksoy.betterlogcat.filter.QueryTerm
+import com.melihaksoy.betterlogcat.settings.BetterLogcatSettings
 import com.melihaksoy.betterlogcat.ui.logcat.tabTitle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,20 +47,49 @@ class BetterLogcatTabs(
             object : ContentManagerListener {
                 override fun contentRemoved(event: ContentManagerEvent) {
                     trees.remove(event.content)
+                    saveTabs()
                 }
+
+                override fun selectionChanged(event: ContentManagerEvent) = saveTabs()
             },
         )
     }
 
-    /** Adds a tab. It starts on the device of the selected tab. */
-    fun addTab() {
+    private val layoutStore = project.service<TabLayoutStore>()
+
+    /** Reopens the tabs of the last session, or one new tab on a first run. */
+    fun restoreTabs() {
+        val saved = layoutStore.state
+        val layouts = saved.tabs.mapNotNull { PaneNode.decode(text = it) }
+        if (!saved.isSaved) {
+            addTab()
+        } else {
+            layouts.forEach { addTab(layout = it) }
+            toolWindow.contentManager.contents.getOrNull(index = saved.selectedTab)?.let { toolWindow.contentManager.setSelectedContent(it) }
+        }
+        // Device and filter changes have no single event; a light periodic save catches them.
+        service.scope.launch {
+            while (true) {
+                delay(timeMillis = SAVE_INTERVAL_MILLIS)
+                withContext(context = Dispatchers.EDT) { saveTabs() }
+            }
+        }
+    }
+
+    /** Adds a tab. Without a [layout] it starts on the device of the selected tab, with the last filter. */
+    fun addTab(layout: PaneNode? = null) {
         val selected = toolWindow.contentManager.selectedContent?.let { trees[it] }
         val initialSerial = selected?.primary?.value?.viewModel?.state?.value?.selectedSerial.orEmpty()
 
         val tree = LogcatPaneTree(
             project = project,
             service = service,
-            initialSerial = initialSerial,
+            layout = layout ?: PaneNode.Leaf(
+                serial = initialSerial,
+                // New tabs start from the last filter; the very first one from package:mine.
+                query = BetterLogcatSettings.getInstance().state.lastFilter ?: QueryTerm.Mine.text,
+            ),
+            onChanged = ::saveTabs,
         )
         val content = ContentFactory.getInstance().createContent(tree.component, "", false)
         content.isCloseable = true
@@ -79,6 +112,19 @@ class BetterLogcatTabs(
 
         toolWindow.contentManager.addContent(content)
         toolWindow.contentManager.setSelectedContent(content)
+        saveTabs()
+    }
+
+    private fun saveTabs() {
+        if (project.isDisposed || toolWindow.isDisposed) return
+        val contents = toolWindow.contentManager.contents
+        layoutStore.state.tabs = contents.mapNotNull { trees[it]?.snapshot()?.encode() }.toMutableList()
+        layoutStore.state.selectedTab = contents.indexOf(toolWindow.contentManager.selectedContent).coerceAtLeast(minimumValue = 0)
+        layoutStore.state.isSaved = true
+    }
+
+    private companion object {
+        const val SAVE_INTERVAL_MILLIS = 3_000L
     }
 
     /** Shown when every tab is closed: the tool window stays open with a link to a new tab. */

@@ -24,7 +24,8 @@ import javax.swing.JPanel
 class LogcatPaneTree(
     private val project: Project,
     private val service: BetterLogcatProjectService,
-    initialSerial: String,
+    layout: PaneNode,
+    private val onChanged: () -> Unit = {},
 ) : Disposable {
 
     val component: JPanel = JPanel(BorderLayout())
@@ -41,11 +42,38 @@ class LogcatPaneTree(
         get() = panes.size
 
     init {
-        val first = createPane(
-            serial = initialSerial,
-            query = null,
+        component.add(build(node = layout), BorderLayout.CENTER)
+    }
+
+    private fun build(node: PaneNode): JComponent = when (node) {
+        is PaneNode.Leaf -> createPane(
+            serial = node.serial,
+            query = node.query,
+        ).component
+        is PaneNode.Split -> OnePixelSplitter(node.isVertical, node.proportion).apply {
+            firstComponent = build(node = node.first)
+            secondComponent = build(node = node.second)
+        }
+    }
+
+    /** The current shape, for saving: splits with their sizes, and each pane's device and filter. */
+    fun snapshot(): PaneNode = snapshotOf(component = component.getComponent(0) as JComponent)
+
+    private fun snapshotOf(component: JComponent): PaneNode {
+        if (component is OnePixelSplitter) {
+            return PaneNode.Split(
+                isVertical = component.orientation,
+                proportion = component.proportion,
+                first = snapshotOf(component = component.firstComponent),
+                second = snapshotOf(component = component.secondComponent),
+            )
+        }
+        val pane = panes.firstOrNull { it.component === component }
+        val state = pane?.viewModel?.state?.value
+        return PaneNode.Leaf(
+            serial = state?.selectedSerial.orEmpty(),
+            query = state?.filter?.toQueryString().orEmpty(),
         )
-        component.add(first.component, BorderLayout.CENTER)
     }
 
     /** [query] null restores the user's last filter. */
@@ -102,6 +130,7 @@ class LogcatPaneTree(
         splitter.firstComponent = source.component
         splitter.secondComponent = newPane.component
         refresh()
+        onChanged()
     }
 
     private fun close(pane: LogcatPane) {
@@ -119,6 +148,7 @@ class LogcatPaneTree(
         if (_primary.value === pane) _primary.value = panes.firstOrNull()
         Disposer.dispose(pane)
         refresh()
+        onChanged()
     }
 
     private fun replace(
