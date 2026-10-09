@@ -121,7 +121,8 @@ class LogFilterMatcher(
         }
 
         private fun matchesPackage(entry: LogEntry): Boolean {
-            val process = processNames[entry.pid].orEmpty()
+            // A start/death line belongs to the app it is about, not to system_server that logged it.
+            val process = entry.processEvent?.packageName ?: processNames[entry.pid].orEmpty()
             if (term.value == QueryTerm.MINE && term.mode == MatchMode.CONTAINS) {
                 return projectAppIds.isEmpty() || process.substringBefore(':') in projectAppIds
             }
@@ -141,8 +142,7 @@ class LogFilterMatcher(
         }
 
         private fun matchesIs(entry: LogEntry): Boolean = when (term.value.lowercase()) {
-            "crash" -> entry.level == LogLevel.ASSERT ||
-                (entry.level == LogLevel.ERROR && entry.tag == "AndroidRuntime" && entry.message.startsWith("FATAL EXCEPTION"))
+            "crash" -> entry.isCrash
             "stacktrace" -> entry.hasStackFrames
             "json" -> entry.json is JsonContent.Found
             else -> false

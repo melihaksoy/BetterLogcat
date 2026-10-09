@@ -20,6 +20,11 @@ class LogBuffer(capacity: Int) {
     private val tagCounts = HashMap<String, Int>()
     private val tagPids = HashMap<String, MutableSet<Int>>()
 
+    // Entries per tag per second over the last RATE_SECONDS seconds of device time, in ring buffers.
+    private val rateStamps = HashMap<String, LongArray>()
+    private val rateCounts = HashMap<String, IntArray>()
+    private var latestSecond = 0L
+
     val totalCount: Int
         get() = all.size
 
@@ -28,6 +33,30 @@ class LogBuffer(capacity: Int) {
 
     /** Entry count per tag over all received entries, filtered or not. */
     fun tagCountsSnapshot(): Map<String, Int> = HashMap(tagCounts)
+
+    /** Entries per second for each tag, oldest first, ending at the newest second seen. */
+    fun tagRatesSnapshot(): Map<String, IntArray> = rateCounts.keys.associateWith { tag ->
+        val stamps = rateStamps.getValue(tag)
+        val counts = rateCounts.getValue(tag)
+        IntArray(size = RATE_SECONDS) { index ->
+            val second = latestSecond - (RATE_SECONDS - 1 - index)
+            val slot = Math.floorMod(second, RATE_SECONDS.toLong()).toInt()
+            if (stamps[slot] == second) counts[slot] else 0
+        }
+    }
+
+    private fun countRate(entry: LogEntry) {
+        val second = entry.epochSeconds
+        if (second > latestSecond) latestSecond = second
+        val slot = Math.floorMod(second, RATE_SECONDS.toLong()).toInt()
+        val stamps = rateStamps.getOrPut(entry.tag) { LongArray(size = RATE_SECONDS) { -1L } }
+        val counts = rateCounts.getOrPut(entry.tag) { IntArray(size = RATE_SECONDS) }
+        if (stamps[slot] != second) {
+            stamps[slot] = second
+            counts[slot] = 0
+        }
+        counts[slot]++
+    }
 
     /** Process ids seen per tag, for telling app tags from system tags. A few pids per tag at most. */
     fun tagPidsSnapshot(): Map<String, Set<Int>> = tagPids.mapValues { it.value.toSet() }
@@ -40,6 +69,7 @@ class LogBuffer(capacity: Int) {
             tagCounts.merge(entry.tag, 1, Int::plus)
             val pids = tagPids.getOrPut(entry.tag) { HashSet() }
             if (pids.size < MAX_PIDS_PER_TAG) pids.add(entry.pid)
+            countRate(entry = entry)
             if (matcher(entry)) visible.add(entry)
         }
         trim()
@@ -111,6 +141,9 @@ class LogBuffer(capacity: Int) {
         visible.clear()
         tagCounts.clear()
         tagPids.clear()
+        rateStamps.clear()
+        rateCounts.clear()
+        latestSecond = 0L
     }
 
     fun visibleSnapshot(): List<LogEntry> = ArrayList(visible)
@@ -142,6 +175,7 @@ class LogBuffer(capacity: Int) {
     private companion object {
         const val MIN_CAPACITY = 1_000
         const val MAX_PIDS_PER_TAG = 16
+        const val RATE_SECONDS = 30
         const val MERGE_LOOK_BACK = 8
 
         /** Chunking loggers split between 3000 and 4000 chars, at a line break when they can. */

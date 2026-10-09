@@ -27,6 +27,18 @@ class LogEntry(
         StackFrameParser.containsFrame(text = message)
     }
 
+    /** An app crash: an assert, or AndroidRuntime's FATAL EXCEPTION. */
+    val isCrash: Boolean
+        get() = level == LogLevel.ASSERT || (level == LogLevel.ERROR && tag == "AndroidRuntime" && message.startsWith("FATAL EXCEPTION"))
+
+    /** App process start or end, when this is one of ActivityManager's lines about it. Null otherwise. */
+    val processEvent: ProcessEvent? by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        ProcessEvent.parse(
+            tag = tag,
+            message = message,
+        )
+    }
+
     /** Long enough to fill several rows. Long messages collapse like JSON. */
     val isLong: Boolean
         get() = message.length > LONG_MESSAGE_CHARS

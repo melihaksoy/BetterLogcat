@@ -18,6 +18,13 @@ sealed interface LogcatIntent {
     data class ChangeQuery(val query: String) : LogcatIntent
     data object RefreshSavedFilters : LogcatIntent
 
+    data class ToggleBookmark(val id: Long) : LogcatIntent
+    data class JumpToBookmark(val delta: Int) : LogcatIntent
+    data object JumpToCrash : LogcatIntent
+
+    /** Selects and shows an entry by id, for example from the network panel. */
+    data class JumpToEntry(val id: Long) : LogcatIntent
+
     /** After a rendering crash: close side panels, so a saved panel cannot crash every start. */
     data object ResetViewAfterCrash : LogcatIntent
     data class SetLevelColor(

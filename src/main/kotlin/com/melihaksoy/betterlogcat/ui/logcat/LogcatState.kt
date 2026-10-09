@@ -6,6 +6,7 @@ import com.melihaksoy.betterlogcat.model.Device
 import com.melihaksoy.betterlogcat.model.HighlightRule
 import com.melihaksoy.betterlogcat.model.LogEntry
 import com.melihaksoy.betterlogcat.model.LogLevel
+import com.melihaksoy.betterlogcat.network.NetworkCall
 import com.melihaksoy.betterlogcat.ui.logcat.model.LogcatContentUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SavedFiltersUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SelectionUiModel
@@ -39,6 +40,11 @@ data class LogcatState(
     val selection: SelectionUiModel = SelectionUiModel(),
     val toggledIds: Set<Long> = emptySet(),
     val savedFilters: SavedFiltersUiModel = SavedFiltersUiModel(),
+    val networkCalls: List<NetworkCall> = emptyList(),
+    val crashCount: Int = 0,
+    val bookmarkedIds: Set<Long> = emptySet(),
+    /** Entries per second per tag over the last 30 seconds, oldest first. */
+    val tagRates: Map<String, IntArray> = emptyMap(),
     val isPaused: Boolean = false,
     /** Name of the loaded R8/ProGuard mapping file. Empty when none. */
     val mappingFileName: String = "",

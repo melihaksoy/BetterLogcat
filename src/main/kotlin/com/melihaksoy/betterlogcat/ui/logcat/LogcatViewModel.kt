@@ -32,6 +32,7 @@ import com.melihaksoy.betterlogcat.model.LogColumn
 import com.melihaksoy.betterlogcat.model.LogEntry
 import com.melihaksoy.betterlogcat.model.LogLevel
 import com.melihaksoy.betterlogcat.model.TimeFormat
+import com.melihaksoy.betterlogcat.network.NetworkTracker
 import com.melihaksoy.betterlogcat.settings.BetterLogcatSettings
 import com.melihaksoy.betterlogcat.ui.logcat.model.LogcatContentUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SavedFiltersUiModel
@@ -116,6 +117,9 @@ class LogcatViewModel(
     private var streamingSerial = ""
     private var streamGeneration = 0
     private var retracer: StackRetracer? = null
+    private val networkTracker = NetworkTracker()
+    private var isNetworkDirty = false
+    private var lastRatesPublish = 0L
 
     init {
         buffer.refilter(predicate = matcher::matches)
@@ -155,6 +159,7 @@ class LogcatViewModel(
             .onEach(::addToHistory)
             .launchIn(scope = workScope)
         workScope.launch { publishLoop() }
+        workScope.launch { ageRefreshLoop() }
     }
 
     fun onIntent(intent: LogcatIntent) {
@@ -163,6 +168,12 @@ class LogcatViewModel(
             is LogcatIntent.ChangeQuery -> updateFilter { it.copy(terms = emptyList(), query = intent.query) }
             LogcatIntent.RefreshSavedFilters -> refreshSavedFilters()
             LogcatIntent.ResetViewAfterCrash -> updateViewOptions { it.copy(sidePanel = SidePanel.NONE) }
+            is LogcatIntent.ToggleBookmark -> _state.update {
+                it.copy(bookmarkedIds = if (intent.id in it.bookmarkedIds) it.bookmarkedIds - intent.id else it.bookmarkedIds + intent.id)
+            }
+            is LogcatIntent.JumpToBookmark -> jumpToBookmark(delta = intent.delta)
+            LogcatIntent.JumpToCrash -> jumpToCrash()
+            is LogcatIntent.JumpToEntry -> jumpToEntry(id = intent.id)
             is LogcatIntent.SetLevelColor -> appearanceStore.setLevelColor(
                 level = intent.level,
                 colorArgb = intent.colorArgb,
@@ -356,6 +367,12 @@ class LogcatViewModel(
         val batch = retracer?.let { current -> received.map { it.withMessage(message = current.retrace(message = it.message)) } } ?: received
         buffer.append(entries = batch)
         isDirty = true
+        var crashes = 0
+        for (entry in batch) {
+            if (networkTracker.onEntry(entry = entry)) isNetworkDirty = true
+            if (entry.isCrash) crashes++
+        }
+        if (crashes > 0) _state.update { it.copy(crashCount = it.crashCount + crashes) }
         val names = _state.value.processNames
         for (entry in batch) {
             if (entry.pid !in names && requestedPids.add(entry.pid)) {
@@ -400,12 +417,20 @@ class LogcatViewModel(
         val entries = buffer.visibleSnapshot()
         val tagCounts = buffer.tagCountsSnapshot()
         val tagPids = buffer.tagPidsSnapshot()
+        val calls = if (isNetworkDirty) networkTracker.snapshot() else null
+        isNetworkDirty = false
+        // Rates change every second at most; refresh them once a second.
+        val now = System.currentTimeMillis()
+        val rates = if (now - lastRatesPublish >= RATES_INTERVAL_MILLIS) buffer.tagRatesSnapshot() else null
+        if (rates != null) lastRatesPublish = now
         _state.update {
             it.copy(
                 entries = entries,
                 totalCount = buffer.totalCount,
                 tagCounts = tagCounts,
                 tagPids = tagPids,
+                networkCalls = calls ?: it.networkCalls,
+                tagRates = rates ?: it.tagRates,
             )
         }
     }
@@ -429,11 +454,16 @@ class LogcatViewModel(
     private fun clear() {
         workScope.launch {
             buffer.clear()
+            networkTracker.clear()
             _state.update {
                 it.copy(
                     selection = SelectionUiModel(),
                     toggledIds = emptySet(),
                     pausedNewCount = 0,
+                    networkCalls = emptyList(),
+                    crashCount = 0,
+                    bookmarkedIds = emptySet(),
+                    tagRates = emptyMap(),
                 )
             }
             publish()
@@ -867,6 +897,51 @@ class LogcatViewModel(
         }
     }
 
+    /** `age:` is relative to now, so filters with it are rerun every few seconds. */
+    private suspend fun ageRefreshLoop() {
+        while (true) {
+            delay(duration = AGE_REFRESH)
+            if (_state.value.filter.effective().terms.any { it.key == QueryKey.AGE }) refilter()
+        }
+    }
+
+    private fun jumpToEntry(id: Long) {
+        if (_state.value.entries.any { it.id == id }) {
+            pressRow(
+                intent = LogcatIntent.PressRow(
+                    id = id,
+                    isExtend = false,
+                    isToggle = false,
+                ),
+            )
+        } else {
+            showStatus(message = BetterLogcatBundle.message("status.entryHidden"))
+        }
+    }
+
+    private fun jumpToCrash() {
+        val crash = _state.value.entries.lastOrNull { it.isCrash }
+        if (crash == null) {
+            showStatus(message = BetterLogcatBundle.message("status.crashHidden"))
+        } else {
+            jumpToEntry(id = crash.id)
+        }
+    }
+
+    /** Next (delta 1) or previous (-1) bookmark from the selected row, wrapping around. */
+    private fun jumpToBookmark(delta: Int) {
+        val current = _state.value
+        val marked = current.entries.filter { it.id in current.bookmarkedIds }
+        if (marked.isEmpty()) return
+        val lead = current.selection.leadId
+        val target = if (delta > 0) {
+            marked.firstOrNull { it.id > lead } ?: marked.first()
+        } else {
+            marked.lastOrNull { it.id < lead } ?: marked.last()
+        }
+        jumpToEntry(id = target.id)
+    }
+
     private fun showStatus(message: String) {
         _events.trySend(element = LogcatEvent.ShowStatus(message = message))
     }
@@ -926,6 +1001,8 @@ class LogcatViewModel(
         val PUBLISH_INTERVAL = 80.milliseconds
         val FILTER_DEBOUNCE = 120.milliseconds
         val HISTORY_DEBOUNCE = 3.seconds
+        val AGE_REFRESH = 5.seconds
+        const val RATES_INTERVAL_MILLIS = 1_000L
         const val MAX_HISTORY = 20
         const val NANOS_PER_SECOND = 1_000_000_000L
         const val MIN_COLUMN_WIDTH = 32
