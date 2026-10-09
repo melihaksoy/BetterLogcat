@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.0
+- Bookmarks panel next to Tags and Network: filter, jump, open the saved copy, remove.
+- Bookmarks are saved per project in the IDE cache and survive Clear and a restart. Setting: Keep bookmarks (on by default).
+- Fixed: the empty gutter could not be clicked to bookmark a row.
+- Click the selected row again to deselect it.
+- JSON cut off by the logger, or broken between chunks, is now indented instead of shown raw.
+- Huge single-line messages are cut into list pieces, so scrolling stays smooth.
+- Chunked messages join even when other threads log a lot in between.
+
 ## 0.10.0
 - Tags panel choices live in the search text as `tag=:a,b` / `-tag=:a,b` terms: editable, saved in favorites and history, restored next session.
 - `=:` terms take comma lists (`tag=:OkHttp,Garage`, `package=:a,b`).

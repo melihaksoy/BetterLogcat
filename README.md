@@ -29,6 +29,9 @@ multi-line messages, long JSON, copying, and a busy toolbar.
 - Block selection (click, Shift, Cmd/Ctrl, drag), copy messages or whole lines, double-click any cell for
   free text selection.
 - Gutter: click to bookmark; crash and network rows have icons with quick actions.
+- Bookmarks panel: every bookmarked line of the project, filterable; click to jump, or open the saved copy in an
+  editor. Bookmarks are saved in the IDE cache, so Clear and a restart keep them (Settings → Better Logcat).
+- Click a selected row again (or press Esc) to deselect it.
 - Network panel: Ktor and OkHttp requests paired with responses (status, method, path, time), Copy as cURL.
 - Compare two entries in the diff viewer. R8/ProGuard retrace with a `mapping.txt`.
 
@@ -38,6 +41,7 @@ multi-line messages, long JSON, copying, and a busy toolbar.
 - View settings window with a live preview; package aliases for long package names.
 
 ![Network panel and gutter](docs/images/gutter-network.png)
+![Bookmarks panel](docs/images/bookmarks.png)
 ![Ktor response](docs/images/ktor.png)
 ![View settings](docs/images/view-settings.png)
 
