@@ -7,9 +7,9 @@ import com.melihaksoy.betterlogcat.core.mapEither
 import com.melihaksoy.betterlogcat.domain.usecase.ClearDeviceLogInteractor
 import com.melihaksoy.betterlogcat.domain.usecase.LogcatRequest
 import com.melihaksoy.betterlogcat.domain.usecase.ObserveDevicesInteractor
+import com.melihaksoy.betterlogcat.domain.usecase.ObserveProcessesInteractor
 import com.melihaksoy.betterlogcat.domain.usecase.ObserveProjectAppIdsInteractor
 import com.melihaksoy.betterlogcat.domain.usecase.ProcessSnapshot
-import com.melihaksoy.betterlogcat.domain.usecase.ObserveProcessesInteractor
 import com.melihaksoy.betterlogcat.domain.usecase.StreamLogcatInteractor
 import com.melihaksoy.betterlogcat.filter.LogBuffer
 import com.melihaksoy.betterlogcat.filter.LogFilter
@@ -24,8 +24,11 @@ import com.melihaksoy.betterlogcat.format.LogCopyFormatter
 import com.melihaksoy.betterlogcat.format.StackFrame
 import com.melihaksoy.betterlogcat.format.StackRetracer
 import com.melihaksoy.betterlogcat.ide.AppearanceStore
+import com.melihaksoy.betterlogcat.ide.BookmarkStore
 import com.melihaksoy.betterlogcat.ide.PackageAliasStore
 import com.melihaksoy.betterlogcat.ide.SourceNavigator
+import com.melihaksoy.betterlogcat.model.Bookmark
+import com.melihaksoy.betterlogcat.model.BookmarkKey
 import com.melihaksoy.betterlogcat.model.Device
 import com.melihaksoy.betterlogcat.model.DeviceState
 import com.melihaksoy.betterlogcat.model.LogColumn
@@ -35,6 +38,7 @@ import com.melihaksoy.betterlogcat.model.TimeFormat
 import com.melihaksoy.betterlogcat.network.NetworkCall
 import com.melihaksoy.betterlogcat.network.NetworkTracker
 import com.melihaksoy.betterlogcat.settings.BetterLogcatSettings
+import com.melihaksoy.betterlogcat.ui.logcat.model.BookmarkUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.LogcatContentUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.NetworkDetailUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SavedFiltersUiModel
@@ -88,6 +92,7 @@ class LogcatViewModel(
     private val settings: BetterLogcatSettings,
     private val aliasStore: PackageAliasStore,
     private val appearanceStore: AppearanceStore,
+    private val bookmarkStore: BookmarkStore,
 ) {
     private val _state = MutableStateFlow(value = initialState())
     val state: StateFlow<LogcatState> = _state.asStateFlow()
@@ -123,6 +128,11 @@ class LogcatViewModel(
     private var isNetworkDirty = false
     private var lastRatesPublish = 0L
 
+    /** The project's bookmarks, and the id of each one's line in this buffer. Buffer thread only. */
+    private var bookmarks: List<Bookmark> = emptyList()
+    private var bookmarkKeys: Set<BookmarkKey> = emptySet()
+    private val liveBookmarkIds = HashMap<BookmarkKey, Long>()
+
     init {
         buffer.refilter(predicate = matcher::matches)
         observeDevices()
@@ -139,6 +149,9 @@ class LogcatViewModel(
             .launchIn(scope = workScope)
         appearanceStore.highlightRules
             .onEach { rules -> _state.update { it.copy(highlightRules = rules) } }
+            .launchIn(scope = workScope)
+        bookmarkStore.bookmarks
+            .onEach(::onBookmarksChanged)
             .launchIn(scope = workScope)
         observeProjectAppIds()
             .mapEither(
@@ -174,14 +187,14 @@ class LogcatViewModel(
                 when (intent.panel) {
                     SidePanel.TAGS -> it.copy(tagsPanelWidth = intent.widthDp)
                     SidePanel.NETWORK -> it.copy(networkPanelWidth = intent.widthDp)
+                    SidePanel.BOOKMARKS -> it.copy(bookmarksPanelWidth = intent.widthDp)
                     SidePanel.NONE -> it
                 }
             }
             is LogcatIntent.ResizeNetworkDetail -> updateViewOptions { it.copy(networkDetailHeight = intent.heightDp) }
             is LogcatIntent.SelectNetworkCall -> workScope.launch { showNetworkDetail(call = intent.call) }
-            is LogcatIntent.ToggleBookmark -> _state.update {
-                it.copy(bookmarkedIds = if (intent.id in it.bookmarkedIds) it.bookmarkedIds - intent.id else it.bookmarkedIds + intent.id)
-            }
+            is LogcatIntent.ToggleBookmark -> workScope.launch { toggleBookmark(id = intent.id) }
+            is LogcatIntent.RemoveBookmark -> bookmarkStore.remove(key = intent.key)
             is LogcatIntent.JumpToBookmark -> jumpToBookmark(delta = intent.delta)
             LogcatIntent.JumpToCrash -> jumpToCrash()
             is LogcatIntent.JumpToEntry -> jumpToEntry(id = intent.id)
@@ -381,6 +394,17 @@ class LogcatViewModel(
         val batch = retracer?.let { current -> received.map { it.withMessage(message = current.retrace(message = it.message)) } } ?: received
         buffer.append(entries = batch)
         isDirty = true
+        if (bookmarkKeys.isNotEmpty()) {
+            var isFound = false
+            for (entry in batch) {
+                val key = BookmarkKey.of(entry = entry)
+                if (key in bookmarkKeys) {
+                    liveBookmarkIds[key] = entry.id
+                    isFound = true
+                }
+            }
+            if (isFound) publishBookmarks()
+        }
         var crashes = 0
         for (entry in batch) {
             if (networkTracker.onEntry(entry = entry)) isNetworkDirty = true
@@ -428,6 +452,8 @@ class LogcatViewModel(
 
     private fun publish() {
         isDirty = false
+        // Lines trimmed from the buffer are no longer in the log.
+        if (liveBookmarkIds.values.removeIf { buffer.find(id = it) == null }) publishBookmarks()
         val entries = buffer.visibleSnapshot()
         val tagCounts = buffer.tagCountsSnapshot()
         val tagPids = buffer.tagPidsSnapshot()
@@ -476,6 +502,8 @@ class LogcatViewModel(
         workScope.launch {
             buffer.clear()
             networkTracker.clear()
+            liveBookmarkIds.clear()
+            bookmarkStore.onLogCleared()
             _state.update {
                 it.copy(
                     selection = SelectionUiModel(),
@@ -484,10 +512,10 @@ class LogcatViewModel(
                     networkCalls = emptyList(),
                     networkDetail = null,
                     crashCount = 0,
-                    bookmarkedIds = emptySet(),
                     tagRates = emptyMap(),
                 )
             }
+            publishBookmarks()
             publish()
         }
         val serial = _state.value.selectedSerial
@@ -704,6 +732,7 @@ class LogcatViewModel(
             sidePanel = options.sidePanel.name
             tagsPanelWidth = options.tagsPanelWidth
             networkPanelWidth = options.networkPanelWidth
+            bookmarksPanelWidth = options.bookmarksPanelWidth
             networkDetailHeight = options.networkDetailHeight
             includeThreadId = options.includeThreadId
             showRepeatedTags = options.showRepeatedTags
@@ -964,6 +993,45 @@ class LogcatViewModel(
         }
     }
 
+    private fun onBookmarksChanged(saved: List<Bookmark>) {
+        bookmarks = saved
+        bookmarkKeys = saved.mapTo(HashSet()) { it.key }
+        liveBookmarkIds.clear()
+        if (bookmarkKeys.isNotEmpty()) {
+            buffer.forEachEntry { entry ->
+                val key = BookmarkKey.of(entry = entry)
+                if (key in bookmarkKeys) liveBookmarkIds[key] = entry.id
+            }
+        }
+        publishBookmarks()
+    }
+
+    private fun publishBookmarks() {
+        val models = bookmarks.map {
+            BookmarkUiModel(
+                bookmark = it,
+                liveId = liveBookmarkIds[it.key] ?: BookmarkUiModel.NOT_IN_LOG,
+            )
+        }
+        val ids = liveBookmarkIds.values.toSet()
+        _state.update {
+            it.copy(
+                bookmarks = models,
+                bookmarkedIds = ids,
+            )
+        }
+    }
+
+    private fun toggleBookmark(id: Long) {
+        val entry = buffer.find(id = id) ?: return
+        val current = _state.value
+        bookmarkStore.toggle(
+            entry = entry,
+            processName = current.processNames[entry.pid].orEmpty(),
+            deviceName = current.selectedDevice?.name.orEmpty(),
+        )
+    }
+
     /** Next (delta 1) or previous (-1) bookmark from the selected row, wrapping around. */
     private fun jumpToBookmark(delta: Int) {
         val current = _state.value
@@ -1012,6 +1080,7 @@ class LogcatViewModel(
                 sidePanel = SidePanel.entries.firstOrNull { it.name == saved.sidePanel } ?: SidePanel.NONE,
                 tagsPanelWidth = saved.tagsPanelWidth,
                 networkPanelWidth = saved.networkPanelWidth,
+                bookmarksPanelWidth = saved.bookmarksPanelWidth,
                 networkDetailHeight = saved.networkDetailHeight,
                 includeThreadId = saved.includeThreadId,
                 showRepeatedTags = saved.showRepeatedTags,

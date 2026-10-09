@@ -7,9 +7,12 @@ import androidx.compose.ui.unit.dp
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.melihaksoy.betterlogcat.filter.LogFilter
 import com.melihaksoy.betterlogcat.filter.PackageFilter
+import com.melihaksoy.betterlogcat.model.Bookmark
 import com.melihaksoy.betterlogcat.model.LogLevel
 import com.melihaksoy.betterlogcat.model.TimeFormat
 import com.melihaksoy.betterlogcat.ui.logcat.LogcatContent
+import com.melihaksoy.betterlogcat.ui.logcat.model.BookmarkUiModel
+import com.melihaksoy.betterlogcat.ui.logcat.model.SidePanel
 import com.melihaksoy.betterlogcat.ui.logcat.popup.LogcatPopups
 import com.melihaksoy.betterlogcat.ui.logcat.preview.LogcatPreviewData
 import com.melihaksoy.betterlogcat.ui.theme.BetterLogcatPreviewTheme
@@ -49,6 +52,38 @@ class RenderProbeTest : BasePlatformTestCase() {
         }
     }
 
+    fun testRenderBookmarks() {
+        val dir = System.getenv("RENDER_DIR") ?: return
+        val base = LogcatPreviewData.logsState
+        val marked = base.entries.filter { it.isCrash || it.tag == "Choreographer" }
+        render(File(dir, "bookmarks.png")) {
+            LogcatContent(
+                state = base.copy(
+                    bookmarkedIds = marked.map { it.id }.toSet(),
+                    bookmarks = marked.mapIndexed { index, entry ->
+                        BookmarkUiModel(
+                            bookmark = Bookmark.of(
+                                entry = entry,
+                                processName = "com.vintagegarage.app",
+                                deviceName = "Google Pixel 9",
+                            ),
+                            liveId = if (index == 0) BookmarkUiModel.NOT_IN_LOG else entry.id,
+                        )
+                    },
+                    viewOptions = base.viewOptions.copy(sidePanel = SidePanel.BOOKMARKS),
+                ),
+                popups = LogcatPopups.None,
+                paneActions = object : com.melihaksoy.betterlogcat.ui.logcat.pane.PaneActions {
+                    override val canClose = true
+                    override fun splitRight() = Unit
+                    override fun splitDown() = Unit
+                    override fun close() = Unit
+                },
+                onIntent = {},
+            )
+        }
+    }
+
     fun testRenderViewSettings() {
         val dir = System.getenv("RENDER_DIR") ?: return
         render(File(dir, "view-settings.png"), width = 1880, height = 1520) {
@@ -63,6 +98,7 @@ class RenderProbeTest : BasePlatformTestCase() {
                 onEditAlias = {},
                 onAddAlias = {},
                 onPickColor = { _, _ -> },
+                onPickPreset = { _, _, _ -> },
             )
         }
     }

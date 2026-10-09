@@ -123,6 +123,12 @@ internal fun LogToolbar(
             isSelected = state.viewOptions.sidePanel == SidePanel.NETWORK,
             onToggle = { onIntent(LogcatIntent.ToggleSidePanel(panel = SidePanel.NETWORK)) },
         )
+        ToolbarToggleButton(
+            iconKey = AllIconsKeys.Nodes.Bookmark,
+            tooltip = BetterLogcatBundle.message("toolbar.bookmarks"),
+            isSelected = state.viewOptions.sidePanel == SidePanel.BOOKMARKS,
+            onToggle = { onIntent(LogcatIntent.ToggleSidePanel(panel = SidePanel.BOOKMARKS)) },
+        )
         ToolbarIconButton(
             iconKey = AllIconsKeys.Actions.Expandall,
             tooltip = BetterLogcatBundle.message("toolbar.expandAll"),

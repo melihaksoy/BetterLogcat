@@ -6,9 +6,14 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.ui.ColorChooserService
 import java.awt.Color
+import java.awt.Point
 import com.intellij.openapi.ui.DialogWrapper
+import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.ui.awt.RelativePoint
+import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
 import com.intellij.util.ui.JBUI
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
+import com.melihaksoy.betterlogcat.model.HighlightPreset
 import com.melihaksoy.betterlogcat.ui.logcat.LogcatIntent
 import com.melihaksoy.betterlogcat.ui.logcat.LogcatState
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +35,7 @@ class ViewSettingsDialog(
 ) : DialogWrapper(project, null, true, IdeModalityType.MODELESS) {
 
     private val dialogProject = project
+    private var composePanel: JComponent? = null
 
     init {
         title = BetterLogcatBundle.message("viewSettings.title")
@@ -51,9 +57,11 @@ class ViewSettingsDialog(
                 onEditAlias = onEditAlias,
                 onAddAlias = onAddAlias,
                 onPickColor = ::pickColor,
+                onPickPreset = ::pickPreset,
             )
         }
         panel.preferredSize = JBUI.size(940, 760)
+        composePanel = panel
         return panel
     }
 
@@ -73,6 +81,21 @@ class ViewSettingsDialog(
             ) ?: return@invokeLater
             onPicked(picked.rgb.toLong() and 0xFFFFFFFFL)
         }
+    }
+
+    /** An IDE list popup under the presets dropdown, the same kind as the pickers in the tool window. */
+    private fun pickPreset(
+        at: Point,
+        presets: List<HighlightPreset>,
+        onPicked: (HighlightPreset) -> Unit,
+    ) {
+        val owner = composePanel ?: return
+        JBPopupFactory.getInstance()
+            .createPopupChooserBuilder(presets)
+            .setRenderer(textListCellRenderer { preset: HighlightPreset -> BetterLogcatBundle.message(preset.nameKey) })
+            .setItemChosenCallback { onPicked(it) }
+            .createPopup()
+            .show(RelativePoint(owner, at))
     }
 
     override fun getDimensionServiceKey(): String = "BetterLogcat.ViewSettings"

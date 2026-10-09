@@ -22,6 +22,9 @@ class BetterLogcatSettings : SimplePersistentStateComponent<BetterLogcatSettings
         var loadExistingBuffer by property(defaultValue = true)
         var clearDeviceBuffer by property(defaultValue = true)
 
+        /** Saves bookmarked lines in the IDE cache, so Clear and a restart keep them. */
+        var keepBookmarks by property(defaultValue = true)
+
         var softWrap by property(defaultValue = true)
         var compactRows by property(defaultValue = false)
         var expandByDefault by property(defaultValue = true)
@@ -30,6 +33,7 @@ class BetterLogcatSettings : SimplePersistentStateComponent<BetterLogcatSettings
         var sidePanel by string(defaultValue = "NONE")
         var tagsPanelWidth by property(defaultValue = 280)
         var networkPanelWidth by property(defaultValue = 460)
+        var bookmarksPanelWidth by property(defaultValue = 360)
         var networkDetailHeight by property(defaultValue = 320)
         var includeThreadId by property(defaultValue = true)
         var showRepeatedTags by property(defaultValue = true)

@@ -48,6 +48,16 @@ class BetterLogcatConfigurable : BoundConfigurable(BetterLogcatBundle.message("s
                         )
                 }
             }
+            group(BetterLogcatBundle.message("settings.group.bookmarks")) {
+                row {
+                    checkBox(BetterLogcatBundle.message("settings.keepBookmarks"))
+                        .bindSelected(
+                            getter = { state.keepBookmarks },
+                            setter = { state.keepBookmarks = it },
+                        )
+                        .comment(BetterLogcatBundle.message("settings.keepBookmarks.comment"))
+                }
+            }
         }
     }
 }

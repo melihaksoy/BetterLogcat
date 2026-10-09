@@ -11,6 +11,7 @@ import com.melihaksoy.betterlogcat.domain.usecase.ObserveProjectAppIdsInteractor
 import com.melihaksoy.betterlogcat.domain.usecase.ProcessSnapshot
 import com.melihaksoy.betterlogcat.domain.usecase.StreamLogcatInteractor
 import com.melihaksoy.betterlogcat.ide.AppearanceStore
+import com.melihaksoy.betterlogcat.ide.BookmarkStore
 import com.melihaksoy.betterlogcat.ide.PackageAliasStore
 import com.melihaksoy.betterlogcat.ide.SourceNavigator
 import com.melihaksoy.betterlogcat.model.Device
@@ -47,6 +48,8 @@ class LogcatViewModelTest : BasePlatformTestCase() {
     override fun setUp() {
         super.setUp()
         BetterLogcatSettings.getInstance().loadState(BetterLogcatSettings.SettingsState())
+        // The store is a project service and the light test project is shared, so start empty.
+        BookmarkStore.getInstance(project = project).loadState(state = BookmarkStore.BookmarksState())
         scope = CoroutineScope(context = SupervisorJob() + Dispatchers.Default)
         viewModel = LogcatViewModel(
             scope = scope,
@@ -81,6 +84,7 @@ class LogcatViewModelTest : BasePlatformTestCase() {
             settings = BetterLogcatSettings.getInstance(),
             aliasStore = PackageAliasStore.getInstance(),
             appearanceStore = AppearanceStore.getInstance(),
+            bookmarkStore = BookmarkStore.getInstance(project = project),
         )
     }
 
@@ -153,6 +157,33 @@ class LogcatViewModelTest : BasePlatformTestCase() {
 
         val state = await { it.entries.isEmpty() && it.crashCount == 0 }
         assertEquals(0, state.totalCount)
+    }
+
+    fun `test bookmarks survive clear and find their line again`() {
+        val line = entry(tag = "AndroidRuntime", message = "FATAL EXCEPTION: main", level = LogLevel.ERROR)
+        send(line)
+        await { it.entries.size == 1 }
+
+        viewModel.onIntent(LogcatIntent.ToggleBookmark(id = line.id))
+        await { it.bookmarkedIds == setOf(line.id) && it.bookmarks.single().isInLog }
+
+        viewModel.onIntent(LogcatIntent.Clear)
+        val cleared = await { it.entries.isEmpty() && it.bookmarks.size == 1 && !it.bookmarks.single().isInLog }
+        assertEquals("FATAL EXCEPTION: main", cleared.bookmarks.single().bookmark.message)
+
+        // The same line read again (new session, new id) is found by its time, process, thread and tag.
+        val again = LogEntry(
+            id = 1_000,
+            epochSeconds = line.epochSeconds,
+            nanos = line.nanos,
+            pid = line.pid,
+            tid = line.tid,
+            level = line.level,
+            tag = line.tag,
+            message = line.message,
+        )
+        send(again)
+        assertEquals(1_000L, await { it.bookmarks.singleOrNull()?.liveId == 1_000L }.bookmarkedIds.single())
     }
 
     private fun send(vararg entries: LogEntry) {

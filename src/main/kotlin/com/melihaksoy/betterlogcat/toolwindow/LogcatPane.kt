@@ -18,6 +18,7 @@ import androidx.compose.ui.window.WindowExceptionHandler
 import com.intellij.openapi.project.Project
 import com.melihaksoy.betterlogcat.ide.BetterLogcatProjectService
 import com.melihaksoy.betterlogcat.ide.AppearanceStore
+import com.melihaksoy.betterlogcat.ide.BookmarkStore
 import com.melihaksoy.betterlogcat.ide.PackageAliasStore
 import com.melihaksoy.betterlogcat.ide.SourceNavigator
 import com.melihaksoy.betterlogcat.interactor.ClearDeviceLogInteractorImpl
@@ -58,6 +59,7 @@ class LogcatPane(
         settings = BetterLogcatSettings.getInstance(),
         aliasStore = PackageAliasStore.getInstance(),
         appearanceStore = AppearanceStore.getInstance(),
+        bookmarkStore = BookmarkStore.getInstance(project = project),
     )
 
     private val paneActions = actions(this)

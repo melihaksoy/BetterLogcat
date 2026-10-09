@@ -6,8 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
@@ -26,11 +28,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
+import com.melihaksoy.betterlogcat.model.HighlightPreset
 import com.melihaksoy.betterlogcat.model.HighlightRule
 import com.melihaksoy.betterlogcat.model.LogLevel
 import com.melihaksoy.betterlogcat.ui.logcat.LogcatIntent
+import com.melihaksoy.betterlogcat.ui.logcat.component.PickerButton
+import com.melihaksoy.betterlogcat.ui.logcat.component.ToolbarIconButton
 import com.melihaksoy.betterlogcat.ui.theme.BetterLogcatPreviewTheme
 import com.melihaksoy.betterlogcat.ui.theme.LogColors
 import com.melihaksoy.betterlogcat.ui.theme.rememberLogColors
@@ -42,6 +48,9 @@ import org.jetbrains.jewel.ui.component.Link
 import org.jetbrains.jewel.ui.component.OutlinedButton
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.TextField
+import org.jetbrains.jewel.ui.component.Tooltip
+import org.jetbrains.jewel.ui.icons.AllIconsKeys
+import java.awt.Point
 
 /** Colors that read well on light and dark themes. */
 private val PALETTE = listOf(
@@ -68,6 +77,7 @@ internal fun ColorsSection(
     colors: LogColors,
     onIntent: (LogcatIntent) -> Unit,
     onPickColor: (initial: Long, onPicked: (Long) -> Unit) -> Unit,
+    onPickPreset: (at: Point, presets: List<HighlightPreset>, onPicked: (HighlightPreset) -> Unit) -> Unit,
 ) {
     Column(
         modifier = Modifier.padding(top = 6.dp),
@@ -94,14 +104,28 @@ internal fun ColorsSection(
             text = BetterLogcatBundle.message("colors.keywords"),
             modifier = Modifier.padding(top = 6.dp),
         )
-        if (highlightRules.isEmpty()) {
+        // An added preset shows as one pill; its rules stay out of the keyword list.
+        val addedPresets = HighlightPreset.all.filter { it.isAdded(current = highlightRules) }
+        val presetPatterns = addedPresets.flatMapTo(destination = HashSet()) { preset -> preset.rules.map { it.pattern } }
+        val ownRules = highlightRules.filter { it.pattern !in presetPatterns }
+        PresetsRow(
+            addedPresets = addedPresets,
+            colors = colors,
+            onAdd = { preset -> preset.rules.forEach { onIntent(LogcatIntent.AddHighlightRule(rule = it)) } },
+            onRemove = { preset ->
+                val patterns = preset.rules.map { it.pattern }
+                highlightRules.filter { it.pattern in patterns }.forEach { onIntent(LogcatIntent.RemoveHighlightRule(rule = it)) }
+            },
+            onPickPreset = onPickPreset,
+        )
+        if (ownRules.isEmpty() && addedPresets.isEmpty()) {
             Text(
                 text = BetterLogcatBundle.message("colors.keywords.empty"),
                 color = colors.muted,
             )
         }
         // Its own scroll box, so a long keyword list never pushes the other settings away.
-        if (highlightRules.isNotEmpty()) {
+        if (ownRules.isNotEmpty()) {
             Column(
                 modifier = Modifier
                     .heightIn(max = KEYWORD_LIST_HEIGHT)
@@ -114,42 +138,137 @@ internal fun ColorsSection(
                     .padding(all = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(space = 4.dp),
             ) {
-        highlightRules.forEach { rule ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
-            ) {
-                Swatch(
-                    color = Color(rule.colorArgb),
-                    isSelected = false,
-                    onClick = {
-                        onPickColor(rule.colorArgb) { argb -> onIntent(LogcatIntent.AddHighlightRule(rule = rule.copy(colorArgb = argb))) }
-                    },
-                )
-                Text(
-                    text = rule.pattern,
-                    color = Color(rule.colorArgb),
-                    style = JewelTheme.editorTextStyle,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                if (rule.isRegex) {
-                    Text(
-                        text = BetterLogcatBundle.message("colors.keywords.regex"),
-                        color = colors.muted,
+                ownRules.forEach { rule ->
+                    KeywordRow(
+                        rule = rule,
+                        colors = colors,
+                        onIntent = onIntent,
+                        onPickColor = onPickColor,
                     )
                 }
-                Link(
-                    text = BetterLogcatBundle.message("aliases.remove"),
-                    onClick = { onIntent(LogcatIntent.RemoveHighlightRule(rule = rule)) },
-                )
-            }
-        }
             }
         }
         AddKeywordRow(
             colors = colors,
             onAdd = { onIntent(LogcatIntent.AddHighlightRule(rule = it)) },
             onPickColor = onPickColor,
+        )
+    }
+}
+
+/** One keyword: a long pattern is cut to one line (full text in the tooltip), so Regex and Remove keep their place. */
+@Composable
+private fun KeywordRow(
+    rule: HighlightRule,
+    colors: LogColors,
+    onIntent: (LogcatIntent) -> Unit,
+    onPickColor: (initial: Long, onPicked: (Long) -> Unit) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
+    ) {
+        Swatch(
+            color = Color(rule.colorArgb),
+            isSelected = false,
+            onClick = {
+                onPickColor(rule.colorArgb) { argb -> onIntent(LogcatIntent.AddHighlightRule(rule = rule.copy(colorArgb = argb))) }
+            },
+        )
+        Tooltip(
+            tooltip = { Text(text = rule.pattern) },
+            modifier = Modifier.weight(1f),
+        ) {
+            Text(
+                text = rule.pattern,
+                color = Color(rule.colorArgb),
+                style = JewelTheme.editorTextStyle,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (rule.isRegex) {
+            Text(
+                text = BetterLogcatBundle.message("colors.keywords.regex"),
+                color = colors.muted,
+            )
+        }
+        Link(
+            text = BetterLogcatBundle.message("aliases.remove"),
+            onClick = { onIntent(LogcatIntent.RemoveHighlightRule(rule = rule)) },
+        )
+    }
+}
+
+/** Added library presets as pills with a remove button, then a dropdown with the presets not added yet. */
+@Composable
+private fun PresetsRow(
+    addedPresets: List<HighlightPreset>,
+    colors: LogColors,
+    onAdd: (HighlightPreset) -> Unit,
+    onRemove: (HighlightPreset) -> Unit,
+    onPickPreset: (at: Point, presets: List<HighlightPreset>, onPicked: (HighlightPreset) -> Unit) -> Unit,
+) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(space = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(space = 4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = BetterLogcatBundle.message("colors.presets"),
+            color = colors.muted,
+        )
+        addedPresets.forEach { preset ->
+            PresetPill(
+                name = BetterLogcatBundle.message(preset.nameKey),
+                colors = colors,
+                onRemove = { onRemove(preset) },
+            )
+        }
+        val available = HighlightPreset.all - addedPresets.toSet()
+        if (available.isNotEmpty()) {
+            PickerButton(
+                label = BetterLogcatBundle.message("colors.presets.add"),
+                detail = "",
+                statusColor = Color.Unspecified,
+                onClick = { at -> onPickPreset(at, available, onAdd) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PresetPill(
+    name: String,
+    colors: LogColors,
+    onRemove: () -> Unit,
+) {
+    val shape = RoundedCornerShape(size = 4.dp)
+    Row(
+        modifier = Modifier
+            .background(
+                color = colors.link.copy(alpha = 0.14f),
+                shape = shape,
+            )
+            .padding(
+                start = 8.dp,
+                end = 2.dp,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(space = 2.dp),
+    ) {
+        Text(
+            text = name,
+            color = colors.link,
+            fontWeight = FontWeight.SemiBold,
+        )
+        ToolbarIconButton(
+            modifier = Modifier.size(20.dp),
+            iconKey = AllIconsKeys.General.CloseSmall,
+            tooltip = BetterLogcatBundle.message("colors.presets.remove", name),
+            onClick = onRemove,
         )
     }
 }
@@ -337,10 +456,11 @@ private fun PreviewColorsSection() {
                     colorArgb = 0xFFC678DD,
                     isRegex = true,
                 ),
-            ),
+            ) + HighlightPreset.Ktor.rules,
             colors = rememberLogColors(),
             onIntent = {},
             onPickColor = { _, _ -> },
+            onPickPreset = { _, _, _ -> },
         )
     }
 }

@@ -164,6 +164,11 @@ class LogBuffer(capacity: Int) {
 
     fun visibleSnapshot(): List<LogEntry> = ArrayList(visible)
 
+    /** Every entry, hidden ones too, oldest first. */
+    fun forEachEntry(action: (LogEntry) -> Unit) {
+        all.forEach(action)
+    }
+
     private fun trim() {
         if (all.size <= capacity) return
         // Drop an extra 10 % so trimming does not run on every batch.

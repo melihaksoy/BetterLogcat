@@ -33,6 +33,7 @@ import com.melihaksoy.betterlogcat.model.DeviceState
 import com.melihaksoy.betterlogcat.filter.PackageFilter
 import com.melihaksoy.betterlogcat.filter.SuggestionContext
 import com.melihaksoy.betterlogcat.ui.logcat.component.EmptyState
+import com.melihaksoy.betterlogcat.ui.logcat.component.BookmarksPanel
 import com.melihaksoy.betterlogcat.ui.logcat.component.FilterBar
 import com.melihaksoy.betterlogcat.ui.logcat.component.LogList
 import com.melihaksoy.betterlogcat.ui.logcat.component.LogToolbar
@@ -165,7 +166,11 @@ internal fun LogcatContent(
             }
             val panel = state.viewOptions.sidePanel
             if (panel != SidePanel.NONE) {
-                val savedWidth = if (panel == SidePanel.TAGS) state.viewOptions.tagsPanelWidth else state.viewOptions.networkPanelWidth
+                val savedWidth = when (panel) {
+                    SidePanel.TAGS -> state.viewOptions.tagsPanelWidth
+                    SidePanel.BOOKMARKS -> state.viewOptions.bookmarksPanelWidth
+                    else -> state.viewOptions.networkPanelWidth
+                }
                 // Live width while dragging; saved when the drag ends.
                 var liveWidth by remember(panel, savedWidth) { mutableFloatStateOf(value = savedWidth.toFloat()) }
                 ResizeHandle(
@@ -190,6 +195,13 @@ internal fun LogcatContent(
                         calls = state.networkCalls,
                         detail = state.networkDetail,
                         detailHeight = state.viewOptions.networkDetailHeight,
+                        colors = colors,
+                        onOpenInEditor = popups::openInEditor,
+                        onIntent = onIntent,
+                    )
+                    SidePanel.BOOKMARKS -> BookmarksPanel(
+                        modifier = panelModifier,
+                        bookmarks = state.bookmarks,
                         colors = colors,
                         onOpenInEditor = popups::openInEditor,
                         onIntent = onIntent,

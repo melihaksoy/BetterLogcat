@@ -1,5 +1,6 @@
 package com.melihaksoy.betterlogcat.ui.logcat
 
+import com.melihaksoy.betterlogcat.model.BookmarkKey
 import com.melihaksoy.betterlogcat.filter.PackageFilter
 import com.melihaksoy.betterlogcat.filter.QueryTerm
 import com.melihaksoy.betterlogcat.format.CopyMode
@@ -21,6 +22,7 @@ sealed interface LogcatIntent {
 
     data class ToggleBookmark(val id: Long) : LogcatIntent
     data class JumpToBookmark(val delta: Int) : LogcatIntent
+    data class RemoveBookmark(val key: BookmarkKey) : LogcatIntent
     data object JumpToCrash : LogcatIntent
 
     /** Copies one entry, whatever the selection is. */
