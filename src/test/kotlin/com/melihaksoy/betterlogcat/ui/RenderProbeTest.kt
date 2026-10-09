@@ -193,6 +193,28 @@ class RenderProbeTest : BasePlatformTestCase() {
         }
     }
 
+    fun testRenderGutterAndNetwork() {
+        val dir = System.getenv("RENDER_DIR") ?: return
+        val base = LogcatPreviewData.logsState
+        val okhttp = base.entries[2]
+        render(File(dir, "gutter-network.png"), width = 2400, height = 900) {
+            LogcatContent(
+                state = base.copy(
+                    bookmarkedIds = setOf(base.entries[1].id),
+                    crashCount = 1,
+                    networkCalls = listOf(
+                        com.melihaksoy.betterlogcat.network.NetworkCall(method = "GET", url = "https://api.vintagegarage.app/v2/listings/88213", requestEntryId = 99, requestEpochMillis = 0, responseEntryId = okhttp.id, statusCode = 200, durationMillis = 340),
+                        com.melihaksoy.betterlogcat.network.NetworkCall(method = "POST", url = "https://api.vintagegarage.app/v1/login", requestEntryId = 100, requestEpochMillis = 5, responseEntryId = 101, statusCode = 401, durationMillis = 123),
+                    ),
+                    viewOptions = base.viewOptions.copy(sidePanel = com.melihaksoy.betterlogcat.ui.logcat.model.SidePanel.NETWORK),
+                ),
+                popups = LogcatPopups.None,
+                paneActions = com.melihaksoy.betterlogcat.ui.logcat.pane.PaneActions.None,
+                onIntent = {},
+            )
+        }
+    }
+
     fun testRenderNarrow() {
         val dir = System.getenv("RENDER_DIR") ?: return
         render(File(dir, "narrow.png"), width = 1300, height = 500) {

@@ -12,5 +12,6 @@ fun LogcatState.tabTitle(): String {
         runningPackages = packages,
         aliases = packageAliases,
     )
-    return BetterLogcatBundle.message("tab.title", device, packageLabel)
+    val title = BetterLogcatBundle.message("tab.title", device, packageLabel)
+    return if (crashCount > 0) BetterLogcatBundle.message("tab.title.crashes", title, crashCount) else title
 }

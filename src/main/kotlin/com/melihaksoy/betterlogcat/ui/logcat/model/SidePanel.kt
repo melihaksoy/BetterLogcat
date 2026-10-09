@@ -4,4 +4,5 @@ package com.melihaksoy.betterlogcat.ui.logcat.model
 enum class SidePanel {
     NONE,
     TAGS,
+    NETWORK,
 }

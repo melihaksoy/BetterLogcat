@@ -110,6 +110,8 @@ data class MessageLabels(
     val json: (String) -> String,
     val more: (String) -> String,
     val showAll: (Int, String) -> String,
+    val copyJson: String = "",
+    val openInEditor: String = "",
 )
 
 private const val JSON_PREVIEW_CHARS = 110
@@ -128,6 +130,8 @@ internal fun buildMessageText(
     onOpenFrame: (StackFrame) -> Unit,
     onOpenUrl: (String) -> Unit,
     onShowAll: () -> Unit,
+    onCopyJson: () -> Unit = {},
+    onOpenInEditor: () -> Unit = {},
 ): AnnotatedString {
     val text = buildAnnotatedString {
         val append = { part: String ->
@@ -168,6 +172,8 @@ internal fun buildMessageText(
                 append = append,
                 appendJsonPart = appendJsonPart,
                 onOpenUrl = onOpenUrl,
+                onCopyJson = onCopyJson,
+                onOpenInEditor = onOpenInEditor,
             )
         }
     }
@@ -228,6 +234,8 @@ private fun AnnotatedString.Builder.appendCollapsed(
     append: (String) -> Unit,
     appendJsonPart: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
+    onCopyJson: () -> Unit,
+    onOpenInEditor: () -> Unit,
 ) {
     val firstLine = entry.lines.first()
     val json = entry.json as? JsonContent.Found
@@ -250,6 +258,23 @@ private fun AnnotatedString.Builder.appendCollapsed(
             text = "  " + labels.json(sizeLabel(chars = json.main.raw.length)),
             colors = colors,
         )
+        // One click to copy or open the body: no scrolling through hundreds of lines.
+        if (labels.copyJson.isNotEmpty()) {
+            append("  ")
+            appendAction(
+                text = labels.copyJson,
+                colors = colors,
+                onClick = onCopyJson,
+            )
+        }
+        if (labels.openInEditor.isNotEmpty()) {
+            append("  ")
+            appendAction(
+                text = labels.openInEditor,
+                colors = colors,
+                onClick = onOpenInEditor,
+            )
+        }
     } else {
         val hidden = when {
             entry.lines.size > 1 -> labels.moreLines(entry.lines.size - 1)
@@ -346,6 +371,22 @@ private fun AnnotatedString.Builder.appendJson(
             start = start + range.first,
             end = start + range.last + 1,
         )
+    }
+}
+
+private fun AnnotatedString.Builder.appendAction(
+    text: String,
+    colors: LogColors,
+    onClick: () -> Unit,
+) {
+    withLink(
+        link = LinkAnnotation.Clickable(
+            tag = "action",
+            styles = TextLinkStyles(style = SpanStyle(color = colors.link)),
+            linkInteractionListener = { onClick() },
+        ),
+    ) {
+        append(text)
     }
 }
 

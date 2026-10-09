@@ -22,6 +22,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import com.melihaksoy.betterlogcat.network.NetworkCall
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.derivedStateOf
 import com.melihaksoy.betterlogcat.model.HighlightRule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -110,6 +115,8 @@ internal fun LogList(
     onFindOpenChange: (Boolean) -> Unit = {},
     onIntent: (LogcatIntent) -> Unit,
     onRowMenu: (LogEntry, Point) -> Unit,
+    onGutterMenu: (LogEntry, GutterUiModel, Point) -> Unit = { _, _, _ -> },
+    onOpenInEditor: (LogEntry) -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
@@ -218,7 +225,25 @@ internal fun LogList(
         listState = listState,
         itemCount = layout.itemCount,
         selectionLeadId = state.selection.leadId,
+        toggledIds = state.toggledIds,
     )
+    val callsByEntry = remember(state.networkCalls) {
+        buildMap {
+            state.networkCalls.forEach { call ->
+                if (call.requestEntryId != NetworkCall.NO_ENTRY) put(call.requestEntryId, call)
+                if (call.responseEntryId != NetworkCall.NO_ENTRY) put(call.responseEntryId, call)
+            }
+        }
+    }
+    val coroutineScope = rememberCoroutineScope()
+    // Collapse a big entry from anywhere inside it, then show its row.
+    val collapseEntry = { entryIndex: Int ->
+        currentState.entries.getOrNull(index = entryIndex)?.let { entry ->
+            val headerItem = currentLayout.firstItemOf(entryIndex = entryIndex)
+            currentOnIntent(LogcatIntent.ToggleExpanded(id = entry.id))
+            coroutineScope.launch { listState.scrollToItem(index = headerItem) }
+        }
+    }
     ScrollToLead(
         listState = listState,
         state = state,
@@ -226,14 +251,14 @@ internal fun LogList(
     )
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val columnsWidth = EXPAND_SLOT + ROW_HORIZONTAL_PADDING * 2 +
+        val columnsWidth = LEADING_SLOT + ROW_HORIZONTAL_PADDING * 2 +
             viewOptions.visibleColumns.sumOf { viewOptions.width(column = it) }.dp
         val isStacked = maxWidth < columnsWidth + MIN_MESSAGE_WIDTH
         val currentIsStacked by rememberUpdatedState(newValue = isStacked)
-        val messageIndent = EXPAND_SLOT + ROW_HORIZONTAL_PADDING + viewOptions.visibleColumns.sumOf {
+        val messageIndent = LEADING_SLOT + ROW_HORIZONTAL_PADDING + viewOptions.visibleColumns.sumOf {
             if (it == LogColumn.LEVEL) it.defaultWidthDp else viewOptions.width(column = it)
         }.dp
-        val messageIndentStacked = EXPAND_SLOT + ROW_HORIZONTAL_PADDING
+        val messageIndentStacked = LEADING_SLOT + ROW_HORIZONTAL_PADDING
         Column(modifier = Modifier.fillMaxSize()) {
             LogHeader(
                 viewOptions = viewOptions,
@@ -402,8 +427,32 @@ internal fun LogList(
                         val isSelected = entry.id in state.selection.selectedIds
                         val isNextSelected = state.entries.getOrNull(index = index + 1)?.id in state.selection.selectedIds
                         val pieces = layout.chunked[index]
-                        if (ref.chunk == 0) {
+                        val event = entry.processEvent
+                        if (ref.chunk == 0 && event != null) {
+                            ProcessMarkerRow(
+                                entry = entry,
+                                event = event,
+                                displayName = PackageAliasStore.display(
+                                    processName = event.packageName,
+                                    aliases = state.packageAliases,
+                                ),
+                                isSelected = isSelected,
+                                colors = colors,
+                                textStyle = textStyle,
+                            )
+                        } else if (ref.chunk == 0) {
+                            val gutter = GutterUiModel(
+                                isBookmarked = entry.id in state.bookmarkedIds,
+                                isCrash = entry.isCrash,
+                                call = callsByEntry[entry.id],
+                            )
                             LogRow(
+                                gutter = gutter,
+                                onCopyJson = { onIntent(LogcatIntent.CopyEntry(id = entry.id, mode = CopyMode.JSON_PRETTY)) },
+                                onOpenInEditor = { onOpenInEditor(entry) },
+                                onGutterClick = { point ->
+                                    if (gutter.hasMenu) onGutterMenu(entry, gutter, point) else onIntent(LogcatIntent.ToggleBookmark(id = entry.id))
+                                },
                                 entry = entry,
                                 previous = state.entries.getOrNull(index = index - 1),
                                 processName = PackageAliasStore.display(
@@ -438,8 +487,23 @@ internal fun LogList(
                                 isSingleLine = !viewOptions.softWrap,
                                 colors = colors,
                                 textStyle = textStyle,
+                                onCollapse = { collapseEntry(index) },
                             )
                         }
+                    }
+                }
+                val firstVisibleRef by remember(layout) { derivedStateOf { layout.itemAt(item = listState.firstVisibleItemIndex) } }
+                if (firstVisibleRef.chunk > 0) {
+                    state.entries.getOrNull(index = firstVisibleRef.entryIndex)?.let { entry ->
+                        StickyEntryBar(
+                            modifier = Modifier.align(alignment = Alignment.TopStart),
+                            entry = entry,
+                            colors = colors,
+                            textStyle = textStyle,
+                            onCollapse = { collapseEntry(firstVisibleRef.entryIndex) },
+                            onCopyJson = { onIntent(LogcatIntent.CopyEntry(id = entry.id, mode = CopyMode.JSON_PRETTY)) },
+                            onOpenInEditor = { onOpenInEditor(entry) },
+                        )
                     }
                 }
                 if (isFindOpen) {
@@ -514,8 +578,14 @@ private fun rememberFollowMode(
     listState: LazyListState,
     itemCount: Int,
     selectionLeadId: Long,
+    toggledIds: Set<Long>,
 ): Boolean {
     var isFollowing by remember { mutableStateOf(value = true) }
+    // Expanding or collapsing a row is reading, not following: stop, or the list jumps to the newest log.
+    val currentToggled by rememberUpdatedState(newValue = toggledIds)
+    LaunchedEffect(Unit) {
+        snapshotFlow { currentToggled }.drop(count = 1).collect { isFollowing = false }
+    }
     LaunchedEffect(selectionLeadId) {
         if (selectionLeadId != SelectionUiModel.NO_ROW) isFollowing = false
     }
@@ -661,7 +731,7 @@ private fun cellAt(
     density: Density,
 ): SelectableCell = with(density) {
     if (isStacked && yInRow > STACKED_FIRST_LINE.toPx()) return SelectableCell.MESSAGE
-    var edge = (ROW_HORIZONTAL_PADDING + EXPAND_SLOT).toPx()
+    var edge = (ROW_HORIZONTAL_PADDING + LEADING_SLOT).toPx()
     for (column in LogColumn.entries.filter { it in viewOptions.visibleColumns }) {
         val width = (if (column == LogColumn.LEVEL) column.defaultWidthDp else viewOptions.width(column = column)).dp.toPx()
         if (x < edge + width) {

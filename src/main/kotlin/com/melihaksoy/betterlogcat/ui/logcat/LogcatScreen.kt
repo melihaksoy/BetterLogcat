@@ -36,6 +36,7 @@ import com.melihaksoy.betterlogcat.ui.logcat.component.FilterBar
 import com.melihaksoy.betterlogcat.ui.logcat.component.LogList
 import com.melihaksoy.betterlogcat.ui.logcat.component.LogToolbar
 import com.melihaksoy.betterlogcat.ui.logcat.component.PackageLabels
+import com.melihaksoy.betterlogcat.ui.logcat.component.NetworkPanel
 import com.melihaksoy.betterlogcat.ui.logcat.component.TagsPanel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SidePanel
 import com.melihaksoy.betterlogcat.ui.logcat.pane.PaneActions
@@ -55,6 +56,7 @@ import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
 
 private val SIDE_PANEL_WIDTH = 280.dp
+private val NETWORK_PANEL_WIDTH = 420.dp
 
 @Composable
 fun LogcatScreen(
@@ -161,6 +163,17 @@ internal fun LogcatContent(
             }
             when (state.viewOptions.sidePanel) {
                 SidePanel.NONE -> Unit
+                SidePanel.NETWORK -> {
+                    Divider(orientation = Orientation.Vertical)
+                    NetworkPanel(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(NETWORK_PANEL_WIDTH),
+                        calls = state.networkCalls,
+                        colors = colors,
+                        onIntent = onIntent,
+                    )
+                }
                 SidePanel.TAGS -> {
                     Divider(orientation = Orientation.Vertical)
                     val appTags = remember(state.tagPids, state.processNames, state.projectAppIds) {
@@ -171,6 +184,7 @@ internal fun LogcatContent(
                             .fillMaxHeight()
                             .width(SIDE_PANEL_WIDTH),
                         tagCounts = state.tagCounts,
+                        tagRates = state.tagRates,
                         appTags = appTags,
                         filter = state.filter,
                         colors = colors,
@@ -183,6 +197,7 @@ internal fun LogcatContent(
         StatusLine(
             state = state,
             colors = colors,
+            onIntent = onIntent,
         )
     }
 }
@@ -246,6 +261,14 @@ private fun MainArea(
                 isFindOpen = isFindOpen,
                 onFindOpenChange = onFindOpenChange,
                 onIntent = onIntent,
+                onGutterMenu = { entry, gutter, point ->
+                    popups.showGutterMenu(
+                        entry = entry,
+                        gutter = gutter,
+                        at = point,
+                    )
+                },
+                onOpenInEditor = popups::openInEditor,
                 onRowMenu = { entry, point ->
                     popups.showRowMenu(
                         entry = entry,

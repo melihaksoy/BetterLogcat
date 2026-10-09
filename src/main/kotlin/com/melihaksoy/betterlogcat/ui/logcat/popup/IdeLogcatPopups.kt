@@ -13,6 +13,21 @@ import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
+import java.awt.datatransfer.StringSelection
+import com.melihaksoy.betterlogcat.ui.logcat.model.SidePanel
+import com.melihaksoy.betterlogcat.ui.logcat.component.GutterUiModel
+import com.melihaksoy.betterlogcat.network.NetworkCall
+import com.melihaksoy.betterlogcat.format.MessageDocument
+import com.melihaksoy.betterlogcat.format.LogTimeFormatter
+import com.melihaksoy.betterlogcat.network.CurlBuilder
+import com.intellij.testFramework.LightVirtualFile
+import com.intellij.openapi.ide.CopyPasteManager
+import com.intellij.openapi.fileTypes.PlainTextFileType
+import com.intellij.openapi.fileTypes.FileTypeManager
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.diff.requests.SimpleDiffRequest
+import com.intellij.diff.DiffManager
+import com.intellij.diff.DiffContentFactory
 import com.melihaksoy.betterlogcat.filter.PackageFilter
 import com.melihaksoy.betterlogcat.format.CopyMode
 import com.melihaksoy.betterlogcat.model.Device
@@ -102,6 +117,18 @@ class IdeLogcatPopups(
             group.add(action(text = BetterLogcatBundle.message("menu.copyJsonPretty")) { onIntent(LogcatIntent.Copy(mode = CopyMode.JSON_PRETTY)) })
             group.add(action(text = BetterLogcatBundle.message("menu.copyJsonMinified")) { onIntent(LogcatIntent.Copy(mode = CopyMode.JSON_MINIFIED)) })
         }
+        group.add(action(text = BetterLogcatBundle.message("menu.openInEditor")) { openInEditor(entry = entry) })
+        CurlBuilder.fromMessage(message = entry.message)?.let { curl ->
+            group.add(action(text = BetterLogcatBundle.message("menu.copyCurl")) { copyText(text = curl) })
+        }
+        if (selected.size == 2) {
+            group.add(action(text = BetterLogcatBundle.message("menu.compare")) { compare(first = selected[0], second = selected[1]) })
+        }
+        group.add(
+            action(text = BetterLogcatBundle.message(if (entry.id in current.bookmarkedIds) "menu.removeBookmark" else "menu.bookmark")) {
+                onIntent(LogcatIntent.ToggleBookmark(id = entry.id))
+            },
+        )
         group.addSeparator()
         group.add(action(text = BetterLogcatBundle.message("menu.showOnlyTag", entry.tag)) { onIntent(LogcatIntent.ShowOnlyTag(tag = entry.tag)) })
         group.add(action(text = BetterLogcatBundle.message("menu.hideTag", entry.tag)) { onIntent(LogcatIntent.HideTag(tag = entry.tag)) })
@@ -137,6 +164,90 @@ class IdeLogcatPopups(
             at = at,
             group = group,
         )
+    }
+
+    override fun showGutterMenu(
+        entry: LogEntry,
+        gutter: GutterUiModel,
+        at: Point,
+    ) {
+        val current = state()
+        val group = DefaultActionGroup()
+        group.add(
+            action(text = BetterLogcatBundle.message(if (gutter.isBookmarked) "menu.removeBookmark" else "menu.bookmark")) {
+                onIntent(LogcatIntent.ToggleBookmark(id = entry.id))
+            },
+        )
+        gutter.call?.let { call ->
+            group.addSeparator()
+            if (entry.id == call.requestEntryId && !call.isPending) {
+                group.add(
+                    action(text = BetterLogcatBundle.message("gutter.goToResponse", call.statusCode, call.durationMillis)) {
+                        onIntent(LogcatIntent.JumpToEntry(id = call.responseEntryId))
+                    },
+                )
+            }
+            if (entry.id == call.responseEntryId && call.requestEntryId != NetworkCall.NO_ENTRY) {
+                group.add(action(text = BetterLogcatBundle.message("gutter.goToRequest")) { onIntent(LogcatIntent.JumpToEntry(id = call.requestEntryId)) })
+            }
+            val request = current.entries.firstOrNull { it.id == call.requestEntryId }
+            request?.let { CurlBuilder.fromMessage(message = it.message) }?.let { curl ->
+                group.add(action(text = BetterLogcatBundle.message("menu.copyCurl")) { copyText(text = curl) })
+            }
+            group.add(
+                action(text = BetterLogcatBundle.message("gutter.showNetwork")) {
+                    if (current.viewOptions.sidePanel != SidePanel.NETWORK) onIntent(LogcatIntent.ToggleSidePanel(panel = SidePanel.NETWORK))
+                },
+            )
+        }
+        if (gutter.isCrash) {
+            group.addSeparator()
+            group.add(action(text = BetterLogcatBundle.message("gutter.copyCrash")) { copyText(text = entry.message) })
+        }
+        group.addSeparator()
+        group.add(action(text = BetterLogcatBundle.message("menu.openInEditor")) { openInEditor(entry = entry) })
+        showMenu(
+            at = at,
+            group = group,
+        )
+    }
+
+    /** A read-only editor tab with the message: full editor selection, folding and find for big bodies. */
+    override fun openInEditor(entry: LogEntry) {
+        val isJson = MessageDocument.isPureJson(entry = entry)
+        val fileType = if (isJson) FileTypeManager.getInstance().getFileTypeByExtension("json") else PlainTextFileType.INSTANCE
+        val time = LogTimeFormatter.format(
+            entry = entry,
+            format = TimeFormat.TIME,
+            previous = null,
+        ).replace(':', '-')
+        val name = "${entry.tag.replace(Regex(pattern = "[^A-Za-z0-9._-]+"), "_")}_$time.${if (isJson) "json" else "log"}"
+        val file = LightVirtualFile(name, fileType, MessageDocument.text(entry = entry))
+        file.isWritable = false
+        FileEditorManager.getInstance(project).openFile(file, true)
+    }
+
+    private fun compare(
+        first: LogEntry,
+        second: LogEntry,
+    ) {
+        val bothJson = MessageDocument.isPureJson(entry = first) && MessageDocument.isPureJson(entry = second)
+        val fileType = if (bothJson) FileTypeManager.getInstance().getFileTypeByExtension("json") else PlainTextFileType.INSTANCE
+        val factory = DiffContentFactory.getInstance()
+        val request = SimpleDiffRequest(
+            BetterLogcatBundle.message("compare.title"),
+            factory.create(project, MessageDocument.text(entry = first), fileType),
+            factory.create(project, MessageDocument.text(entry = second), fileType),
+            compareTitle(entry = first),
+            compareTitle(entry = second),
+        )
+        DiffManager.getInstance().showDiff(project, request)
+    }
+
+    private fun compareTitle(entry: LogEntry): String = "${LogTimeFormatter.format(entry = entry, format = TimeFormat.TIME, previous = null)}  ${entry.tag}"
+
+    private fun copyText(text: String) {
+        CopyPasteManager.getInstance().setContents(StringSelection(text))
     }
 
     /** Asks for a short display name. An empty answer removes the alias. */

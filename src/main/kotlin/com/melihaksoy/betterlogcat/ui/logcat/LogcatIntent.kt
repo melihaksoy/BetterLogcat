@@ -22,6 +22,12 @@ sealed interface LogcatIntent {
     data class JumpToBookmark(val delta: Int) : LogcatIntent
     data object JumpToCrash : LogcatIntent
 
+    /** Copies one entry, whatever the selection is. */
+    data class CopyEntry(
+        val id: Long,
+        val mode: CopyMode,
+    ) : LogcatIntent
+
     /** Selects and shows an entry by id, for example from the network panel. */
     data class JumpToEntry(val id: Long) : LogcatIntent
 

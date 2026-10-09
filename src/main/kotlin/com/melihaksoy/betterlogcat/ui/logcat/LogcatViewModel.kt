@@ -174,6 +174,10 @@ class LogcatViewModel(
             is LogcatIntent.JumpToBookmark -> jumpToBookmark(delta = intent.delta)
             LogcatIntent.JumpToCrash -> jumpToCrash()
             is LogcatIntent.JumpToEntry -> jumpToEntry(id = intent.id)
+            is LogcatIntent.CopyEntry -> copyEntries(
+                entries = _state.value.entries.filter { it.id == intent.id },
+                mode = intent.mode,
+            )
             is LogcatIntent.SetLevelColor -> appearanceStore.setLevelColor(
                 level = intent.level,
                 colorArgb = intent.colorArgb,
@@ -825,15 +829,24 @@ class LogcatViewModel(
 
     private fun copy(mode: CopyMode) {
         val current = _state.value
-        val selected = current.entries.filter { it.id in current.selection.selectedIds }
-        if (selected.isEmpty()) return
-        val text = LogCopyFormatter.format(
-            entries = selected,
+        copyEntries(
+            entries = current.entries.filter { it.id in current.selection.selectedIds },
             mode = mode,
-            processNames = current.processNames,
+        )
+    }
+
+    private fun copyEntries(
+        entries: List<LogEntry>,
+        mode: CopyMode,
+    ) {
+        if (entries.isEmpty()) return
+        val text = LogCopyFormatter.format(
+            entries = entries,
+            mode = mode,
+            processNames = _state.value.processNames,
         )
         CopyPasteManager.getInstance().setContents(StringSelection(text))
-        showStatus(message = BetterLogcatBundle.message("status.copied", selected.size))
+        showStatus(message = BetterLogcatBundle.message("status.copied", entries.size))
     }
 
     private fun requestExport() {

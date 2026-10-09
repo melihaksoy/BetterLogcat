@@ -27,6 +27,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import java.awt.Point
 import androidx.compose.ui.unit.dp
 import com.intellij.ide.BrowserUtil
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
@@ -72,6 +73,10 @@ internal fun LogRow(
     messageOverride: AnnotatedString? = null,
     isSelectedBelow: Boolean = false,
     rawProcessName: String = processName,
+    gutter: GutterUiModel = GutterUiModel.None,
+    onGutterClick: (Point) -> Unit = {},
+    onCopyJson: () -> Unit = {},
+    onOpenInEditor: () -> Unit = {},
     onToggleExpanded: () -> Unit,
     onOpenFrame: (StackFrame) -> Unit,
 ) {
@@ -109,6 +114,8 @@ internal fun LogRow(
         Column(modifier = rowModifier) {
             Row(verticalAlignment = Alignment.Top) {
                 HeaderCells(
+                    gutter = gutter,
+                    onGutterClick = onGutterClick,
                     entry = entry,
                     previous = previous,
                     processName = processName,
@@ -122,7 +129,7 @@ internal fun LogRow(
                 )
             }
             MessageCell(
-                modifier = Modifier.padding(start = EXPAND_SLOT),
+                modifier = Modifier.padding(start = LEADING_SLOT),
                 entry = entry,
                 isExpanded = isExpanded || selectedCell == SelectableCell.MESSAGE,
                 isTextSelecting = selectedCell == SelectableCell.MESSAGE,
@@ -136,6 +143,8 @@ internal fun LogRow(
                 textOverride = if (selectedCell == SelectableCell.MESSAGE) null else messageOverride,
                 onOpenFrame = onOpenFrame,
                 onShowAll = onShowAll,
+                onCopyJson = onCopyJson,
+                onOpenInEditor = onOpenInEditor,
             )
         }
     } else {
@@ -144,6 +153,8 @@ internal fun LogRow(
             verticalAlignment = Alignment.Top,
         ) {
             HeaderCells(
+                gutter = gutter,
+                onGutterClick = onGutterClick,
                 entry = entry,
                 previous = previous,
                 processName = processName,
@@ -170,6 +181,8 @@ internal fun LogRow(
                 textOverride = if (selectedCell == SelectableCell.MESSAGE) null else messageOverride,
                 onOpenFrame = onOpenFrame,
                 onShowAll = onShowAll,
+                onCopyJson = onCopyJson,
+                onOpenInEditor = onOpenInEditor,
             )
         }
     }
@@ -194,6 +207,8 @@ private fun Modifier.selectionOutline(
 /** Expand toggle plus the visible fixed-width columns, in a RowScope. */
 @Composable
 private fun HeaderCells(
+    gutter: GutterUiModel,
+    onGutterClick: (Point) -> Unit,
     entry: LogEntry,
     previous: LogEntry?,
     processName: String,
@@ -206,6 +221,10 @@ private fun HeaderCells(
     onToggleExpanded: () -> Unit,
 ) {
     run {
+        Gutter(
+            gutter = gutter,
+            onClick = onGutterClick,
+        )
         ExpandToggle(
             isExpandable = entry.isExpandable,
             isExpanded = isExpanded,
@@ -373,8 +392,12 @@ private fun MessageCell(
     textOverride: AnnotatedString?,
     onOpenFrame: (StackFrame) -> Unit,
     onShowAll: () -> Unit,
+    onCopyJson: () -> Unit,
+    onOpenInEditor: () -> Unit,
 ) {
     val currentOnShowAll by rememberUpdatedState(newValue = onShowAll)
+    val currentOnCopyJson by rememberUpdatedState(newValue = onCopyJson)
+    val currentOnOpenInEditor by rememberUpdatedState(newValue = onOpenInEditor)
     val currentOnOpenFrame by rememberUpdatedState(newValue = onOpenFrame)
     val textColor = messageColor(
         level = entry.level,
@@ -394,6 +417,8 @@ private fun MessageCell(
             onOpenFrame = { currentOnOpenFrame(it) },
             onOpenUrl = { BrowserUtil.browse(it) },
             onShowAll = { currentOnShowAll() },
+            onCopyJson = { currentOnCopyJson() },
+            onOpenInEditor = { currentOnOpenInEditor() },
         )
     }
     if (isTextSelecting) {
@@ -443,6 +468,8 @@ internal fun messageLabels(): MessageLabels = MessageLabels(
     json = { size -> BetterLogcatBundle.message("row.json", size) },
     more = { size -> BetterLogcatBundle.message("row.more", size) },
     showAll = { lines, size -> BetterLogcatBundle.message("row.showAll", lines, size) },
+    copyJson = BetterLogcatBundle.message("row.copyJson"),
+    openInEditor = BetterLogcatBundle.message("row.open"),
 )
 
 /**
@@ -459,9 +486,9 @@ internal fun LogContinuationRow(
     isSingleLine: Boolean,
     colors: LogColors,
     textStyle: TextStyle,
+    onCollapse: () -> Unit,
 ) {
-    Text(
-        text = text,
+    Row(
         modifier = modifier
             .fillMaxWidth()
             .background(color = if (isSelected) colors.link.copy(alpha = SELECTION_TINT) else Color.Transparent)
@@ -476,14 +503,36 @@ internal fun LogContinuationRow(
                     Modifier
                 },
             )
-            .padding(
-                start = indent,
+            .padding(start = ROW_HORIZONTAL_PADDING),
+    ) {
+        // The gutter keeps a collapse button on every piece, so a huge message folds from anywhere.
+        Box(
+            modifier = Modifier.width(LEADING_SLOT),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            Icon(
+                key = AllIconsKeys.General.ChevronUp,
+                contentDescription = BetterLogcatBundle.message("row.collapse"),
+                modifier = Modifier
+                    .size(14.dp)
+                    .clickable(
+                        interactionSource = null,
+                        indication = null,
+                        onClick = onCollapse,
+                    ),
+            )
+        }
+        Text(
+            text = text,
+            modifier = Modifier.padding(
+                start = (indent - ROW_HORIZONTAL_PADDING - LEADING_SLOT).coerceAtLeast(minimumValue = 0.dp),
                 end = ROW_HORIZONTAL_PADDING,
             ),
-        style = textStyle,
-        softWrap = !isSingleLine,
-        overflow = if (isSingleLine) TextOverflow.Clip else TextOverflow.Visible,
-    )
+            style = textStyle,
+            softWrap = !isSingleLine,
+            overflow = if (isSingleLine) TextOverflow.Clip else TextOverflow.Visible,
+        )
+    }
 }
 
 // region Previews

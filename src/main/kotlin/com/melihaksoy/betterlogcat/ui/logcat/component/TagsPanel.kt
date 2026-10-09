@@ -1,6 +1,10 @@
 package com.melihaksoy.betterlogcat.ui.logcat.component
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -54,6 +58,7 @@ import org.jetbrains.jewel.ui.icons.AllIconsKeys
 internal fun TagsPanel(
     modifier: Modifier = Modifier,
     tagCounts: Map<String, Int>,
+    tagRates: Map<String, IntArray> = emptyMap(),
     appTags: Set<String>,
     filter: LogFilter,
     colors: LogColors,
@@ -209,6 +214,7 @@ internal fun TagsPanel(
                             TagRow(
                                 tag = tag,
                                 count = count,
+                                rates = tagRates[tag],
                                 isVisible = filter.isTagVisible(tag = tag),
                                 colors = colors,
                                 onVisibleChange = { isVisible ->
@@ -280,6 +286,7 @@ private fun TagRow(
     modifier: Modifier = Modifier,
     tag: String,
     count: Int,
+    rates: IntArray?,
     isVisible: Boolean,
     colors: LogColors,
     onVisibleChange: (Boolean) -> Unit,
@@ -322,12 +329,45 @@ private fun TagRow(
                 onClick = onShowOnly,
             )
         }
+        if (rates != null) {
+            Sparkline(
+                values = rates,
+                color = if (isVisible) colors.tag(tag = tag) else colors.muted,
+            )
+        }
         Text(
             text = count.toString(),
             color = colors.muted,
         )
     }
 }
+
+/** Entries per second over the last 30 seconds, as small bars. Busy tags stand out at a glance. */
+@Composable
+private fun Sparkline(
+    values: IntArray,
+    color: Color,
+) {
+    val peak = (values.maxOrNull() ?: 0).coerceAtLeast(minimumValue = 1)
+    Canvas(
+        modifier = Modifier
+            .width(SPARKLINE_WIDTH)
+            .height(12.dp),
+    ) {
+        val barWidth = size.width / values.size
+        values.forEachIndexed { index, value ->
+            if (value == 0) return@forEachIndexed
+            val barHeight = size.height * value / peak
+            drawRect(
+                color = color.copy(alpha = 0.7f),
+                topLeft = Offset(x = index * barWidth, y = size.height - barHeight),
+                size = Size(width = (barWidth - 1f).coerceAtLeast(minimumValue = 1f), height = barHeight),
+            )
+        }
+    }
+}
+
+private val SPARKLINE_WIDTH = 44.dp
 
 // region Previews
 

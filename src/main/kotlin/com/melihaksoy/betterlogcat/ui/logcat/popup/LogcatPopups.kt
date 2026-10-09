@@ -1,6 +1,7 @@
 package com.melihaksoy.betterlogcat.ui.logcat.popup
 
 import com.melihaksoy.betterlogcat.model.LogEntry
+import com.melihaksoy.betterlogcat.ui.logcat.component.GutterUiModel
 import java.awt.Point
 
 /**
@@ -16,6 +17,12 @@ interface LogcatPopups {
     )
     fun openSettings()
     fun openViewSettings()
+    fun openInEditor(entry: LogEntry)
+    fun showGutterMenu(
+        entry: LogEntry,
+        gutter: GutterUiModel,
+        at: Point,
+    )
     fun takeScreenshot()
     fun recordScreen()
 
@@ -28,6 +35,12 @@ interface LogcatPopups {
         ) = Unit
         override fun openSettings() = Unit
         override fun openViewSettings() = Unit
+        override fun openInEditor(entry: LogEntry) = Unit
+        override fun showGutterMenu(
+            entry: LogEntry,
+            gutter: GutterUiModel,
+            at: Point,
+        ) = Unit
         override fun takeScreenshot() = Unit
         override fun recordScreen() = Unit
     }

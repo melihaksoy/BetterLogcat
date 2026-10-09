@@ -52,7 +52,7 @@ internal fun LogHeader(
             .padding(horizontal = ROW_HORIZONTAL_PADDING),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(modifier = Modifier.width(EXPAND_SLOT))
+        Box(modifier = Modifier.width(LEADING_SLOT))
         LogColumn.entries
             .filter { it in viewOptions.visibleColumns }
             .forEach { column ->
