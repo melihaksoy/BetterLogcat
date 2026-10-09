@@ -41,7 +41,7 @@ class ObserveProjectAppIdsInteractorImpl(
     override fun invoke(): EitherFlow<Set<String>> = shared
 
     private suspend fun load(): Either<Throwable, Set<String>> = try {
-        Either.Right(value = readAction { project.getProjectSystem().getKnownApplicationIds() }.toSortedSet())
+        Either.Right(value = readAction { project.getProjectSystem().getKnownApplicationIds() }.sorted().toSet())
     } catch (exception: CancellationException) {
         throw exception
     } catch (exception: Exception) {

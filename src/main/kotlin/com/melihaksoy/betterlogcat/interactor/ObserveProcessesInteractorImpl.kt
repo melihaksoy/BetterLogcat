@@ -38,7 +38,7 @@ class ObserveProcessesInteractorImpl(private val session: AdbSession) : ObserveP
                 try {
                     val running = load(serial = serial)
                     running.forEach { (pid, info) -> known[pid] = info.name }
-                    val apps = running.values.filter { it.isApp }.map { it.name.substringBefore(':') }.toSortedSet()
+                    val apps = running.values.filter { it.isApp }.map { it.name.substringBefore(':') }.sorted().toSet()
                     Either.Right(
                         value = ProcessSnapshot(
                             names = HashMap(known),

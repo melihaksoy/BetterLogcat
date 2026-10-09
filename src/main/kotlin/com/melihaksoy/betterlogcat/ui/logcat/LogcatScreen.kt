@@ -248,10 +248,16 @@ private fun MainArea(
 }
 
 /** Tags logged by a process of the open project. */
-private fun appTags(state: LogcatState): Set<String> {
+internal fun appTags(state: LogcatState): Set<String> {
     if (state.projectAppIds.isEmpty()) return emptySet()
     return state.tagPids
-        .filterValues { pids -> pids.any { pid -> state.processNames[pid]?.substringBefore(':') in state.projectAppIds } }
+        .filterValues { pids ->
+            pids.any { pid ->
+                // Unknown pids (no process name yet) are skipped, never looked up as null.
+                val packageName = state.processNames[pid]?.substringBefore(':') ?: return@any false
+                packageName in state.projectAppIds
+            }
+        }
         .keys
 }
 
