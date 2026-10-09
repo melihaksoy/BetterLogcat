@@ -1,0 +1,45 @@
+<idea-plugin>
+    <id>com.melihaksoy.betterlogcat</id>
+    <name>Better Logcat</name>
+    <vendor>Melih Aksoy</vendor>
+    <resource-bundle>messages.BetterLogcatBundle</resource-bundle>
+
+    <description><![CDATA[
+    A modern Logcat tool window for Android Studio.
+    <ul>
+      <li>Multi-line messages and stack traces stay together as one entry, with expand and collapse.</li>
+      <li>Soft wrap toggle, resizable and hideable columns, compact or comfortable rows.</li>
+      <li>Tabs: one tab per device or package. Each tab keeps its own filters.</li>
+      <li>Opens on your project's app by default. Package picker with search.</li>
+      <li>Logcat-style search terms (package:mine, tag:, -tag:, level:, is:crash) with autocomplete, shown as chips.</li>
+      <li>Filter favorites and history with match counts; the last filter is restored.</li>
+      <li>Level toggles and a tag panel to show or hide tags. Package aliases for long names.</li>
+      <li>Double-click a message to select part of its text.</li>
+      <li>Time formats: time, date and time, full, epoch, or time since the previous row.</li>
+      <li>Block selection with Shift and Cmd/Ctrl click, drag selection and smart copy.</li>
+      <li>JSON detection with pretty view and pretty or minified copy.</li>
+      <li>Split panes, each closable with its own close button.</li>
+      <li>Screenshots and screen recordings (MP4 on devices, WebM on emulators).</li>
+      <li>Clickable stack trace frames, pause, clear and export.</li>
+    </ul>
+    Open it from the "Better Logcat" tool window. Assign a shortcut in Settings | Keymap | "Better Logcat".
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.compose</depends>
+    <depends>org.jetbrains.android</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow
+            id="Better Logcat"
+            anchor="bottom"
+            icon="/icons/betterLogcat.svg"
+            factoryClass="com.melihaksoy.betterlogcat.toolwindow.BetterLogcatToolWindowFactory"/>
+        <notificationGroup id="Better Logcat" displayType="BALLOON" key="notification.group"/>
+        <applicationConfigurable
+            parentId="tools"
+            id="com.melihaksoy.betterlogcat.settings"
+            key="settings.displayName"
+            instance="com.melihaksoy.betterlogcat.settings.BetterLogcatConfigurable"/>
+    </extensions>
+</idea-plugin>

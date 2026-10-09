@@ -1,0 +1,283 @@
+package com.melihaksoy.betterlogcat.ui.logcat.popup
+
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.ide.DataManager
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.IdeActions
+import com.intellij.openapi.options.ShowSettingsUtil
+import com.intellij.openapi.project.DumbAwareAction
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.ui.awt.RelativePoint
+import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
+import com.melihaksoy.betterlogcat.BetterLogcatBundle
+import com.melihaksoy.betterlogcat.filter.PackageFilter
+import com.melihaksoy.betterlogcat.format.CopyMode
+import com.melihaksoy.betterlogcat.model.Device
+import com.melihaksoy.betterlogcat.model.JsonContent
+import com.melihaksoy.betterlogcat.model.LogColumn
+import com.melihaksoy.betterlogcat.model.LogEntry
+import com.melihaksoy.betterlogcat.model.TimeFormat
+import com.melihaksoy.betterlogcat.settings.BetterLogcatConfigurable
+import com.melihaksoy.betterlogcat.ui.logcat.LogcatIntent
+import com.melihaksoy.betterlogcat.ui.logcat.LogcatState
+import com.melihaksoy.betterlogcat.ui.logcat.component.PackageLabels
+import com.melihaksoy.betterlogcat.ui.media.MediaActions
+import com.melihaksoy.betterlogcat.ui.viewsettings.ViewSettingsDialog
+import kotlinx.coroutines.flow.StateFlow
+import java.awt.Point
+import javax.swing.JComponent
+
+class IdeLogcatPopups(
+    private val project: Project,
+    private val owner: () -> JComponent,
+    private val state: () -> LogcatState,
+    private val stateFlow: StateFlow<LogcatState>,
+    private val onIntent: (LogcatIntent) -> Unit,
+) : LogcatPopups {
+
+    private var viewSettings: ViewSettingsDialog? = null
+
+    override fun showDevicePicker(at: Point) {
+        val current = state()
+        if (current.devices.isEmpty()) return
+        showChooser(
+            at = at,
+            title = BetterLogcatBundle.message("popup.devices.title"),
+            items = current.devices,
+            selected = current.selectedDevice,
+            label = ::deviceLabel,
+            onChosen = { onIntent(LogcatIntent.SelectDevice(serial = it.serial)) },
+        )
+    }
+
+    override fun showPackagePicker(at: Point) {
+        val current = state()
+        val selected = current.filter.packageFilter
+        val running = current.packages.map { PackageFilter.Package(name = it) }
+        val custom = if (selected is PackageFilter.Package && selected !in running) listOf(selected) else emptyList()
+        showChooser(
+            at = at,
+            title = BetterLogcatBundle.message("popup.packages.title"),
+            items = listOf(PackageFilter.ProjectApps, PackageFilter.All) + custom + running,
+            selected = selected,
+            label = {
+                PackageLabels.chooserLabel(
+                    filter = it,
+                    projectAppIds = current.projectAppIds,
+                    aliases = current.packageAliases,
+                )
+            },
+            onChosen = { onIntent(LogcatIntent.SelectPackage(packageFilter = it)) },
+        )
+    }
+
+    override fun showRowMenu(
+        entry: LogEntry,
+        at: Point,
+    ) {
+        val current = state()
+        val selected = current.entries.filter { it.id in current.selection.selectedIds }
+        val hasJson = selected.any { it.json is JsonContent.Found }
+        val processName = current.processNames[entry.pid].orEmpty().substringBefore(':')
+
+        val group = DefaultActionGroup()
+        val defaultMode = current.viewOptions.defaultCopyMode
+        val otherMode = if (defaultMode == CopyMode.MESSAGE) CopyMode.FULL else CopyMode.MESSAGE
+        group.add(
+            action(
+                text = BetterLogcatBundle.message(if (defaultMode == CopyMode.MESSAGE) "menu.copyMessages" else "menu.copyLines"),
+                shortcutFrom = IdeActions.ACTION_COPY,
+                onClick = { onIntent(LogcatIntent.Copy(mode = defaultMode)) },
+            ),
+        )
+        group.add(
+            action(text = BetterLogcatBundle.message(if (otherMode == CopyMode.MESSAGE) "menu.copyMessages" else "menu.copyLines")) {
+                onIntent(LogcatIntent.Copy(mode = otherMode))
+            },
+        )
+        if (hasJson) {
+            group.add(action(text = BetterLogcatBundle.message("menu.copyJsonPretty")) { onIntent(LogcatIntent.Copy(mode = CopyMode.JSON_PRETTY)) })
+            group.add(action(text = BetterLogcatBundle.message("menu.copyJsonMinified")) { onIntent(LogcatIntent.Copy(mode = CopyMode.JSON_MINIFIED)) })
+        }
+        group.addSeparator()
+        group.add(action(text = BetterLogcatBundle.message("menu.showOnlyTag", entry.tag)) { onIntent(LogcatIntent.ShowOnlyTag(tag = entry.tag)) })
+        group.add(action(text = BetterLogcatBundle.message("menu.hideTag", entry.tag)) { onIntent(LogcatIntent.HideTag(tag = entry.tag)) })
+        if (processName.isNotEmpty()) {
+            group.add(
+                action(text = BetterLogcatBundle.message("menu.showOnlyPackage", processName)) {
+                    onIntent(LogcatIntent.SelectPackage(packageFilter = PackageFilter.Package(name = processName)))
+                },
+            )
+        }
+        if (processName.isNotEmpty()) {
+            group.add(action(text = BetterLogcatBundle.message("menu.setAlias", processName)) { editAlias(packageName = processName) })
+        }
+        if (selected.any { it.isExpandable }) {
+            group.addSeparator()
+            group.add(action(text = BetterLogcatBundle.message("menu.expand")) { onIntent(LogcatIntent.SetSelectionExpanded(isExpanded = true)) })
+            group.add(action(text = BetterLogcatBundle.message("menu.collapse")) { onIntent(LogcatIntent.SetSelectionExpanded(isExpanded = false)) })
+        }
+        if (selected.any { it.hasStackFrames || it.lines.size > 1 }) {
+            group.addSeparator()
+            group.add(action(text = BetterLogcatBundle.message("menu.retrace")) { onIntent(LogcatIntent.ChooseMapping) })
+        }
+        group.addSeparator()
+        group.add(
+            action(
+                text = BetterLogcatBundle.message("menu.selectAll"),
+                shortcutFrom = IdeActions.ACTION_SELECT_ALL,
+                onClick = { onIntent(LogcatIntent.SelectAll) },
+            ),
+        )
+        group.add(action(text = BetterLogcatBundle.message("menu.clear")) { onIntent(LogcatIntent.Clear) })
+        showMenu(
+            at = at,
+            group = group,
+        )
+    }
+
+    /** Asks for a short display name. An empty answer removes the alias. */
+    fun editAlias(packageName: String) {
+        val alias = Messages.showInputDialog(
+            project,
+            BetterLogcatBundle.message("alias.prompt", packageName),
+            BetterLogcatBundle.message("alias.title"),
+            null,
+            state().packageAliases[packageName].orEmpty(),
+            null,
+        ) ?: return
+        onIntent(
+            LogcatIntent.SetPackageAlias(
+                packageName = packageName,
+                alias = alias,
+            ),
+        )
+    }
+
+    /** Asks for a package (running apps offered, any name allowed), then its alias. */
+    fun addAlias() {
+        val running = state().packages
+        val packageName = Messages.showEditableChooseDialog(
+            BetterLogcatBundle.message("alias.choosePackage"),
+            BetterLogcatBundle.message("alias.title"),
+            null,
+            running.toTypedArray(),
+            running.firstOrNull().orEmpty(),
+            null,
+        )?.trim().orEmpty()
+        if (packageName.isNotEmpty()) editAlias(packageName = packageName)
+    }
+
+    override fun openSettings() {
+        ShowSettingsUtil.getInstance().showSettingsDialog(project, BetterLogcatConfigurable::class.java)
+    }
+
+    override fun openViewSettings() {
+        viewSettings?.takeIf { it.isShowing }?.let {
+            it.window.toFront()
+            return
+        }
+        val dialog = ViewSettingsDialog(
+            project = project,
+            state = stateFlow,
+            onIntent = onIntent,
+            onOpenIdeSettings = ::openSettings,
+            onEditAlias = ::editAlias,
+            onAddAlias = ::addAlias,
+        )
+        viewSettings = dialog
+        dialog.show()
+    }
+
+    override fun takeScreenshot() {
+        val device = state().selectedDevice ?: return
+        MediaActions.takeScreenshot(
+            project = project,
+            device = device,
+        )
+    }
+
+    override fun recordScreen() {
+        val device = state().selectedDevice ?: return
+        MediaActions.recordScreen(
+            project = project,
+            device = device,
+        )
+    }
+
+    private fun <T> showChooser(
+        at: Point,
+        title: String,
+        items: List<T>,
+        selected: T?,
+        label: (T) -> String,
+        onChosen: (T) -> Unit,
+    ) {
+        val builder = JBPopupFactory.getInstance()
+            .createPopupChooserBuilder(items)
+            .setTitle(title)
+            .setRenderer(textListCellRenderer { item: T -> label(item) })
+            .setNamerForFiltering { label(it) }
+            .setFilterAlwaysVisible(true)
+            .setItemChosenCallback { onChosen(it) }
+        if (selected != null) builder.setSelectedValue(selected, true)
+        builder.createPopup().show(RelativePoint(owner(), at))
+    }
+
+    /** An IDE list popup, the same kind as the pickers. A Swing JPopupMenu did not show over the Compose panel. */
+    private fun showMenu(
+        at: Point,
+        group: DefaultActionGroup,
+    ) {
+        JBPopupFactory.getInstance()
+            .createActionGroupPopup(
+                null,
+                group,
+                DataManager.getInstance().getDataContext(owner()),
+                JBPopupFactory.ActionSelectionAid.SPEEDSEARCH,
+                true,
+            )
+            .show(RelativePoint(owner(), at))
+    }
+
+    private fun action(
+        text: String,
+        shortcutFrom: String = "",
+        onClick: () -> Unit,
+    ): AnAction {
+        val action = DumbAwareAction.create(text) { onClick() }
+        if (shortcutFrom.isNotEmpty()) {
+            ActionManager.getInstance().getAction(shortcutFrom)?.let { action.copyShortcutFrom(it) }
+        }
+        return action
+    }
+
+    companion object {
+        fun deviceLabel(device: Device): String = buildString {
+            append(device.name)
+            if (device.androidVersion.isNotEmpty()) {
+                append("  ·  ")
+                append(BetterLogcatBundle.message("device.android", device.androidVersion, device.apiLevel))
+            }
+        }
+
+        fun timeFormatLabel(format: TimeFormat): String = when (format) {
+            TimeFormat.TIME -> BetterLogcatBundle.message("time.time")
+            TimeFormat.DATE_TIME -> BetterLogcatBundle.message("time.dateTime")
+            TimeFormat.FULL -> BetterLogcatBundle.message("time.full")
+            TimeFormat.EPOCH -> BetterLogcatBundle.message("time.epoch")
+            TimeFormat.DELTA -> BetterLogcatBundle.message("time.delta")
+        }
+
+        fun columnLabel(column: LogColumn): String = when (column) {
+            LogColumn.TIME -> BetterLogcatBundle.message("column.time")
+            LogColumn.PROCESS -> BetterLogcatBundle.message("column.process")
+            LogColumn.PACKAGE -> BetterLogcatBundle.message("column.package")
+            LogColumn.TAG -> BetterLogcatBundle.message("column.tag")
+            LogColumn.LEVEL -> BetterLogcatBundle.message("column.level")
+        }
+    }
+}
