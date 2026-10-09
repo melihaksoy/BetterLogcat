@@ -90,24 +90,56 @@ internal class LogListLayout(
     private fun rowItemOf(k: Int): Int = splitIndices[k] + extrasBefore[k]
 
     companion object {
-        /** Splits text into pieces of [linesPerPiece] lines. Styles and links carry over. */
+        /** Longest piece in characters. One huge line (minified JSON, a dump) is cut too, so it never lays out at once. */
+        const val MAX_PIECE_CHARS = 3_000
+
+        /** How far back a cut looks for a space or comma, so words and values stay whole. */
+        private const val SOFT_CUT_WINDOW = 200
+
+        /** Splits text into pieces of [linesPerPiece] lines and at most [maxChars] characters. Styles and links carry over. */
         fun split(
             text: AnnotatedString,
             linesPerPiece: Int,
+            maxChars: Int = MAX_PIECE_CHARS,
         ): List<AnnotatedString> {
             val pieces = ArrayList<AnnotatedString>()
             var start = 0
             var lines = 0
-            for (index in text.indices) {
-                if (text[index] != '\n') continue
-                if (++lines == linesPerPiece) {
-                    pieces += text.subSequence(start, index)
-                    start = index + 1
+            var index = 0
+            while (index < text.length) {
+                if (text[index] == '\n') {
+                    if (++lines == linesPerPiece) {
+                        pieces += text.subSequence(start, index)
+                        start = index + 1
+                        lines = 0
+                    }
+                } else if (index - start >= maxChars) {
+                    val cut = softCut(
+                        text = text,
+                        start = start,
+                        index = index,
+                    )
+                    pieces += text.subSequence(start, cut)
+                    start = cut
                     lines = 0
                 }
+                index++
             }
             pieces += text.subSequence(start, text.length)
             return pieces
+        }
+
+        /** End of a piece cut near [index]: just after the last space or comma close by, else [index]. */
+        private fun softCut(
+            text: AnnotatedString,
+            start: Int,
+            index: Int,
+        ): Int {
+            val floor = maxOf(start + 1, index - SOFT_CUT_WINDOW)
+            for (position in index downTo floor) {
+                if (text[position] == ' ' || text[position] == ',') return position + 1
+            }
+            return index
         }
     }
 }

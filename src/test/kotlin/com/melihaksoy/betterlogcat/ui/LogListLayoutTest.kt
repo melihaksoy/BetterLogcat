@@ -7,6 +7,7 @@ import com.melihaksoy.betterlogcat.model.LogLevel
 import com.melihaksoy.betterlogcat.ui.logcat.component.ItemRef
 import com.melihaksoy.betterlogcat.ui.logcat.component.LogListLayout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LogListLayoutTest {
@@ -70,6 +71,22 @@ class LogListLayoutTest {
         assertEquals("line 1", pieces.first().text.lines().first())
         assertEquals("line 21", pieces[1].text.lines().first())
         assertEquals("line 45", pieces.last().text.lines().last())
+    }
+
+    @Test
+    fun `split cuts one huge line at a space`() {
+        val word = "abcdefghi "
+        val text = AnnotatedString(text = word.repeat(n = 1_000))
+
+        val pieces = LogListLayout.split(
+            text = text,
+            linesPerPiece = 20,
+        )
+
+        assertTrue(pieces.size > 1)
+        assertTrue(pieces.all { it.length <= LogListLayout.MAX_PIECE_CHARS + 1 })
+        assertTrue(pieces.dropLast(n = 1).all { it.text.endsWith(" ") })
+        assertEquals(text.text, pieces.joinToString(separator = "") { it.text })
     }
 
     @Test
