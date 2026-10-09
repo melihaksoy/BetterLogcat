@@ -162,6 +162,7 @@ class LogcatViewModel(
             is LogcatIntent.SelectDevice -> selectDevice(serial = intent.serial)
             is LogcatIntent.ChangeQuery -> updateFilter { it.copy(terms = emptyList(), query = intent.query) }
             LogcatIntent.RefreshSavedFilters -> refreshSavedFilters()
+            LogcatIntent.ResetViewAfterCrash -> updateViewOptions { it.copy(sidePanel = SidePanel.NONE) }
             is LogcatIntent.SetLevelColor -> appearanceStore.setLevelColor(
                 level = intent.level,
                 colorArgb = intent.colorArgb,

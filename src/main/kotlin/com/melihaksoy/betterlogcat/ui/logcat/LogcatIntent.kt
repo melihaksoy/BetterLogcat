@@ -17,6 +17,9 @@ sealed interface LogcatIntent {
 
     data class ChangeQuery(val query: String) : LogcatIntent
     data object RefreshSavedFilters : LogcatIntent
+
+    /** After a rendering crash: close side panels, so a saved panel cannot crash every start. */
+    data object ResetViewAfterCrash : LogcatIntent
     data class SetLevelColor(
         val level: LogLevel,
         val colorArgb: Long?,
