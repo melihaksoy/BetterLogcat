@@ -5,6 +5,7 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -26,6 +27,9 @@ import java.awt.Point
 
 /** Width of the gutter at the left of every row. */
 internal val GUTTER = 18.dp
+
+/** Smallest clickable height. Below one text line, so it never makes a row taller. */
+private val GUTTER_HIT_HEIGHT = 14.dp
 
 /** Gutter plus expand chevron: where the columns start. */
 internal val LEADING_SLOT = GUTTER + EXPAND_SLOT
@@ -63,6 +67,8 @@ internal fun Gutter(
     Box(
         modifier = modifier
             .width(GUTTER)
+            // An empty gutter has no content; without a height it could not be hovered or clicked.
+            .heightIn(min = GUTTER_HIT_HEIGHT)
             .swingAnchor(anchor = anchor)
             .hoverable(interactionSource = interactionSource)
             .clickable(
@@ -85,7 +91,7 @@ internal fun Gutter(
                 contentDescription = BetterLogcatBundle.message(if (gutter.isBookmarked) "gutter.bookmarked" else "gutter.bookmark"),
                 modifier = Modifier
                     .size(14.dp)
-                    .alpha(alpha = if (isHovered && !gutter.isBookmarked && !gutter.hasMenu) 0.35f else 1f),
+                    .alpha(alpha = if (isHovered && !gutter.isBookmarked && !gutter.hasMenu) 0.45f else 1f),
             )
         }
     }
