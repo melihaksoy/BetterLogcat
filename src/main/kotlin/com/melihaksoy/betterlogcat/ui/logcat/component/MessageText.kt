@@ -331,6 +331,8 @@ private fun capped(
     }
 }
 
+private const val ACTION_TINT = 0.14f
+private const val ACTION_TINT_HOVER = 0.28f
 private const val MAX_EXPANDED_LINES = 2_000
 private const val MAX_EXPANDED_CHARS = 300_000
 private const val URL_SEARCH_CHARS = 2_000
@@ -379,14 +381,24 @@ private fun AnnotatedString.Builder.appendAction(
     colors: LogColors,
     onClick: () -> Unit,
 ) {
+    // Button-like: bold on a tint, no underline, so it never looks like a web link in the message.
     withLink(
         link = LinkAnnotation.Clickable(
             tag = "action",
-            styles = TextLinkStyles(style = SpanStyle(color = colors.link)),
+            styles = TextLinkStyles(
+                style = SpanStyle(
+                    color = colors.link,
+                    fontWeight = FontWeight.SemiBold,
+                    background = colors.link.copy(alpha = ACTION_TINT),
+                ),
+                hoveredStyle = SpanStyle(background = colors.link.copy(alpha = ACTION_TINT_HOVER)),
+            ),
             linkInteractionListener = { onClick() },
         ),
     ) {
+        append("\u2009")
         append(text)
+        append("\u2009")
     }
 }
 
