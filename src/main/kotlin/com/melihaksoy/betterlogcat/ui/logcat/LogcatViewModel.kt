@@ -32,9 +32,11 @@ import com.melihaksoy.betterlogcat.model.LogColumn
 import com.melihaksoy.betterlogcat.model.LogEntry
 import com.melihaksoy.betterlogcat.model.LogLevel
 import com.melihaksoy.betterlogcat.model.TimeFormat
+import com.melihaksoy.betterlogcat.network.NetworkCall
 import com.melihaksoy.betterlogcat.network.NetworkTracker
 import com.melihaksoy.betterlogcat.settings.BetterLogcatSettings
 import com.melihaksoy.betterlogcat.ui.logcat.model.LogcatContentUiModel
+import com.melihaksoy.betterlogcat.ui.logcat.model.NetworkDetailUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SavedFiltersUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SelectionUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SidePanel
@@ -168,6 +170,15 @@ class LogcatViewModel(
             is LogcatIntent.ChangeQuery -> updateFilter { it.copy(terms = emptyList(), query = intent.query) }
             LogcatIntent.RefreshSavedFilters -> refreshSavedFilters()
             LogcatIntent.ResetViewAfterCrash -> updateViewOptions { it.copy(sidePanel = SidePanel.NONE) }
+            is LogcatIntent.ResizeSidePanel -> updateViewOptions {
+                when (intent.panel) {
+                    SidePanel.TAGS -> it.copy(tagsPanelWidth = intent.widthDp)
+                    SidePanel.NETWORK -> it.copy(networkPanelWidth = intent.widthDp)
+                    SidePanel.NONE -> it
+                }
+            }
+            is LogcatIntent.ResizeNetworkDetail -> updateViewOptions { it.copy(networkDetailHeight = intent.heightDp) }
+            is LogcatIntent.SelectNetworkCall -> workScope.launch { showNetworkDetail(call = intent.call) }
             is LogcatIntent.ToggleBookmark -> _state.update {
                 it.copy(bookmarkedIds = if (intent.id in it.bookmarkedIds) it.bookmarkedIds - intent.id else it.bookmarkedIds + intent.id)
             }
@@ -423,6 +434,13 @@ class LogcatViewModel(
         val tagPids = buffer.tagPidsSnapshot()
         val calls = if (isNetworkDirty) networkTracker.snapshot() else null
         isNetworkDirty = false
+        // A pending call in the details pane gets its response as soon as it arrives.
+        val openDetail = _state.value.networkDetail
+        if (calls != null && openDetail != null) {
+            calls.firstOrNull { it.requestEntryId == openDetail.call.requestEntryId && it.requestEpochMillis == openDetail.call.requestEpochMillis }
+                ?.takeIf { it != openDetail.call }
+                ?.let { showNetworkDetail(call = it) }
+        }
         // Rates change every second at most; refresh them once a second.
         val now = System.currentTimeMillis()
         val rates = if (now - lastRatesPublish >= RATES_INTERVAL_MILLIS) buffer.tagRatesSnapshot() else null
@@ -465,6 +483,7 @@ class LogcatViewModel(
                     toggledIds = emptySet(),
                     pausedNewCount = 0,
                     networkCalls = emptyList(),
+                    networkDetail = null,
                     crashCount = 0,
                     bookmarkedIds = emptySet(),
                     tagRates = emptyMap(),
@@ -693,6 +712,9 @@ class LogcatViewModel(
             prettyJson = options.prettyJson
             timeFormat = options.timeFormat
             sidePanel = options.sidePanel.name
+            tagsPanelWidth = options.tagsPanelWidth
+            networkPanelWidth = options.networkPanelWidth
+            networkDetailHeight = options.networkDetailHeight
             includeThreadId = options.includeThreadId
             showRepeatedTags = options.showRepeatedTags
             showRepeatedPackages = options.showRepeatedPackages
@@ -918,6 +940,17 @@ class LogcatViewModel(
         }
     }
 
+    private fun showNetworkDetail(call: NetworkCall?) {
+        val detail = call?.let {
+            NetworkDetailUiModel(
+                call = it,
+                request = buffer.find(id = it.requestEntryId),
+                response = buffer.find(id = it.responseEntryId),
+            )
+        }
+        _state.update { it.copy(networkDetail = detail) }
+    }
+
     private fun jumpToEntry(id: Long) {
         if (_state.value.entries.any { it.id == id }) {
             pressRow(
@@ -987,6 +1020,9 @@ class LogcatViewModel(
                 prettyJson = saved.prettyJson,
                 timeFormat = saved.timeFormat,
                 sidePanel = SidePanel.entries.firstOrNull { it.name == saved.sidePanel } ?: SidePanel.NONE,
+                tagsPanelWidth = saved.tagsPanelWidth,
+                networkPanelWidth = saved.networkPanelWidth,
+                networkDetailHeight = saved.networkDetailHeight,
                 includeThreadId = saved.includeThreadId,
                 showRepeatedTags = saved.showRepeatedTags,
                 showRepeatedPackages = saved.showRepeatedPackages,

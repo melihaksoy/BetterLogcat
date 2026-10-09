@@ -124,6 +124,22 @@ class LogBuffer(capacity: Int) {
         refilter(predicate = matcher)
     }
 
+    /** The entry with [id], filtered or not. Null when unknown or already dropped. */
+    fun find(id: Long): LogEntry? {
+        var low = 0
+        var high = all.size - 1
+        while (low <= high) {
+            val middle = (low + high) ushr 1
+            val middleId = all[middle].id
+            when {
+                middleId < id -> low = middle + 1
+                middleId > id -> high = middle - 1
+                else -> return all[middle]
+            }
+        }
+        return null
+    }
+
     /** Counts entries that match [predicate], stopping at [limit]. */
     fun count(
         predicate: (LogEntry) -> Boolean,

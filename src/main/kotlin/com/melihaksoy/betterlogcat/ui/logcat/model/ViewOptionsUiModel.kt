@@ -15,6 +15,10 @@ data class ViewOptionsUiModel(
     val prettyJson: Boolean = true,
     val timeFormat: TimeFormat = TimeFormat.TIME,
     val sidePanel: SidePanel = SidePanel.NONE,
+    val tagsPanelWidth: Int = 280,
+    val networkPanelWidth: Int = 460,
+    /** Height of the request/response details in the network panel. */
+    val networkDetailHeight: Int = 320,
     val includeThreadId: Boolean = true,
     val showRepeatedTags: Boolean = true,
     val showRepeatedPackages: Boolean = true,

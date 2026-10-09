@@ -1,6 +1,11 @@
 package com.melihaksoy.betterlogcat.ui.logcat.component
 
 import androidx.compose.foundation.background
+import com.melihaksoy.betterlogcat.ui.logcat.model.NetworkDetailUiModel
+import com.melihaksoy.betterlogcat.model.LogEntry
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -52,7 +57,10 @@ import org.jetbrains.jewel.ui.icons.AllIconsKeys
 internal fun NetworkPanel(
     modifier: Modifier = Modifier,
     calls: List<NetworkCall>,
+    detail: NetworkDetailUiModel? = null,
+    detailHeight: Int = 320,
     colors: LogColors,
+    onOpenInEditor: (LogEntry) -> Unit = {},
     onIntent: (LogcatIntent) -> Unit,
 ) {
     val searchState = rememberTextFieldState()
@@ -99,6 +107,7 @@ internal fun NetworkPanel(
                 )
             },
         )
+        val listModifier = if (detail != null) Modifier.weight(1f) else Modifier
         if (rows.isEmpty()) {
             Text(
                 text = BetterLogcatBundle.message(if (calls.isEmpty()) "network.empty" else "network.noMatch"),
@@ -107,7 +116,7 @@ internal fun NetworkPanel(
             )
         } else {
             val listState = rememberLazyListState()
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = listModifier.fillMaxWidth()) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     state = listState,
@@ -119,9 +128,11 @@ internal fun NetworkPanel(
                         CallRow(
                             call = call,
                             colors = colors,
+                            isSelected = detail?.call?.requestEntryId == call.requestEntryId && detail.call.requestEpochMillis == call.requestEpochMillis,
                             onClick = {
                                 val target = if (call.isPending) call.requestEntryId else call.responseEntryId
                                 onIntent(LogcatIntent.JumpToEntry(id = target))
+                                onIntent(LogcatIntent.SelectNetworkCall(call = call))
                             },
                         )
                     }
@@ -134,12 +145,31 @@ internal fun NetworkPanel(
                 )
             }
         }
+        if (detail != null) {
+            // Live height while dragging; saved when the drag ends.
+            var liveHeight by remember(detailHeight) { mutableFloatStateOf(value = detailHeight.toFloat()) }
+            ResizeHandle(
+                isVertical = false,
+                onDrag = { delta -> liveHeight = (liveHeight - delta).coerceIn(minimumValue = 120f, maximumValue = 1_200f) },
+                onDragEnd = { onIntent(LogcatIntent.ResizeNetworkDetail(heightDp = liveHeight.toInt())) },
+            )
+            NetworkDetailPane(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(liveHeight.dp),
+                detail = detail,
+                colors = colors,
+                onOpenInEditor = onOpenInEditor,
+                onIntent = onIntent,
+            )
+        }
     }
 }
 
 @Composable
 private fun CallRow(
     call: NetworkCall,
+    isSelected: Boolean,
     colors: LogColors,
     onClick: () -> Unit,
 ) {
@@ -156,7 +186,13 @@ private fun CallRow(
         modifier = Modifier
             .fillMaxWidth()
             .hoverable(interactionSource = interactionSource)
-            .background(color = if (isHovered) colors.hover else Color.Transparent)
+            .background(
+                color = when {
+                    isSelected -> colors.link.copy(alpha = 0.16f)
+                    isHovered -> colors.hover
+                    else -> Color.Transparent
+                },
+            )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,

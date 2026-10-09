@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +38,7 @@ import com.melihaksoy.betterlogcat.ui.logcat.component.LogList
 import com.melihaksoy.betterlogcat.ui.logcat.component.LogToolbar
 import com.melihaksoy.betterlogcat.ui.logcat.component.PackageLabels
 import com.melihaksoy.betterlogcat.ui.logcat.component.NetworkPanel
+import com.melihaksoy.betterlogcat.ui.logcat.component.ResizeHandle
 import com.melihaksoy.betterlogcat.ui.logcat.component.TagsPanel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SidePanel
 import com.melihaksoy.betterlogcat.ui.logcat.pane.PaneActions
@@ -55,8 +57,8 @@ import org.jetbrains.jewel.ui.Orientation
 import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
 
-private val SIDE_PANEL_WIDTH = 280.dp
-private val NETWORK_PANEL_WIDTH = 420.dp
+private const val MIN_PANEL_WIDTH = 200f
+private const val MAX_PANEL_WIDTH = 1_000f
 
 @Composable
 fun LogcatScreen(
@@ -161,35 +163,51 @@ internal fun LogcatContent(
                     onIntent = onIntent,
                 )
             }
-            when (state.viewOptions.sidePanel) {
-                SidePanel.NONE -> Unit
-                SidePanel.NETWORK -> {
-                    Divider(orientation = Orientation.Vertical)
-                    NetworkPanel(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .width(NETWORK_PANEL_WIDTH),
+            val panel = state.viewOptions.sidePanel
+            if (panel != SidePanel.NONE) {
+                val savedWidth = if (panel == SidePanel.TAGS) state.viewOptions.tagsPanelWidth else state.viewOptions.networkPanelWidth
+                // Live width while dragging; saved when the drag ends.
+                var liveWidth by remember(panel, savedWidth) { mutableFloatStateOf(value = savedWidth.toFloat()) }
+                ResizeHandle(
+                    isVertical = true,
+                    onDrag = { delta -> liveWidth = (liveWidth - delta).coerceIn(minimumValue = MIN_PANEL_WIDTH, maximumValue = MAX_PANEL_WIDTH) },
+                    onDragEnd = {
+                        onIntent(
+                            LogcatIntent.ResizeSidePanel(
+                                panel = panel,
+                                widthDp = liveWidth.toInt(),
+                            ),
+                        )
+                    },
+                )
+                val panelModifier = Modifier
+                    .fillMaxHeight()
+                    .width(liveWidth.dp)
+                when (panel) {
+                    SidePanel.NONE -> Unit
+                    SidePanel.NETWORK -> NetworkPanel(
+                        modifier = panelModifier,
                         calls = state.networkCalls,
+                        detail = state.networkDetail,
+                        detailHeight = state.viewOptions.networkDetailHeight,
                         colors = colors,
+                        onOpenInEditor = popups::openInEditor,
                         onIntent = onIntent,
                     )
-                }
-                SidePanel.TAGS -> {
-                    Divider(orientation = Orientation.Vertical)
-                    val appTags = remember(state.tagPids, state.processNames, state.projectAppIds) {
-                        appTags(state = state)
+                    SidePanel.TAGS -> {
+                        val appTags = remember(state.tagPids, state.processNames, state.projectAppIds) {
+                            appTags(state = state)
+                        }
+                        TagsPanel(
+                            modifier = panelModifier,
+                            tagCounts = state.tagCounts,
+                            tagRates = state.tagRates,
+                            appTags = appTags,
+                            filter = state.filter,
+                            colors = colors,
+                            onIntent = onIntent,
+                        )
                     }
-                    TagsPanel(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .width(SIDE_PANEL_WIDTH),
-                        tagCounts = state.tagCounts,
-                        tagRates = state.tagRates,
-                        appTags = appTags,
-                        filter = state.filter,
-                        colors = colors,
-                        onIntent = onIntent,
-                    )
                 }
             }
         }

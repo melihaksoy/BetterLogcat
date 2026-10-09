@@ -8,6 +8,7 @@ import com.melihaksoy.betterlogcat.model.LogEntry
 import com.melihaksoy.betterlogcat.model.LogLevel
 import com.melihaksoy.betterlogcat.network.NetworkCall
 import com.melihaksoy.betterlogcat.ui.logcat.model.LogcatContentUiModel
+import com.melihaksoy.betterlogcat.ui.logcat.model.NetworkDetailUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SavedFiltersUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SelectionUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.ViewOptionsUiModel
@@ -41,6 +42,8 @@ data class LogcatState(
     val toggledIds: Set<Long> = emptySet(),
     val savedFilters: SavedFiltersUiModel = SavedFiltersUiModel(),
     val networkCalls: List<NetworkCall> = emptyList(),
+    /** The call open in the network details pane; null when none is open. */
+    val networkDetail: NetworkDetailUiModel? = null,
     val crashCount: Int = 0,
     val bookmarkedIds: Set<Long> = emptySet(),
     /** Entries per second per tag over the last 30 seconds, oldest first. */

@@ -8,6 +8,7 @@ import com.melihaksoy.betterlogcat.model.HighlightRule
 import com.melihaksoy.betterlogcat.model.LogColumn
 import com.melihaksoy.betterlogcat.model.LogLevel
 import com.melihaksoy.betterlogcat.model.TimeFormat
+import com.melihaksoy.betterlogcat.network.NetworkCall
 import com.melihaksoy.betterlogcat.ui.logcat.model.SidePanel
 import com.melihaksoy.betterlogcat.ui.logcat.model.ViewToggle
 import java.io.File
@@ -59,6 +60,14 @@ sealed interface LogcatIntent {
     ) : LogcatIntent
     data object ShowAllTags : LogcatIntent
     data class ToggleSidePanel(val panel: SidePanel) : LogcatIntent
+    data class ResizeSidePanel(
+        val panel: SidePanel,
+        val widthDp: Int,
+    ) : LogcatIntent
+    data class ResizeNetworkDetail(val heightDp: Int) : LogcatIntent
+
+    /** Opens a call in the network details pane; null closes it. */
+    data class SelectNetworkCall(val call: NetworkCall?) : LogcatIntent
     data object ResetFilters : LogcatIntent
 
     data object TogglePause : LogcatIntent
