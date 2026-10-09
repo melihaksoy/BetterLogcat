@@ -27,8 +27,7 @@ class RenderProbeTest : BasePlatformTestCase() {
                 state = base.copy(
                     filter = LogFilter(
                         levels = setOf(LogLevel.DEBUG, LogLevel.WARN, LogLevel.ERROR),
-                        query = "package:mine -tag:art level:W timeout ",
-                        excludedTags = listOf("art", "adbd"),
+                        query = "package:mine level:W -tag=:art,adbd timeout ",
                     ),
                     viewOptions = base.viewOptions.copy(
                         sidePanel = com.melihaksoy.betterlogcat.ui.logcat.model.SidePanel.TAGS,

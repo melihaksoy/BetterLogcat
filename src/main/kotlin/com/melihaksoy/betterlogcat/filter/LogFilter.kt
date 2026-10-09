@@ -4,8 +4,8 @@ import androidx.compose.runtime.Immutable
 import com.melihaksoy.betterlogcat.model.LogLevel
 
 /**
- * [query] is free text. [terms] are the `key:value` chips. Non-empty [includedTags] shows only
- * those tags and [excludedTags] always hides (both come from the Tags panel).
+ * [query] is the search text, terms included (`package:mine -tag=:art`). [terms] holds terms added
+ * from code; [effective] merges both. The Tags panel also writes its choices into the text.
  */
 @Immutable
 data class LogFilter(
@@ -14,10 +14,7 @@ data class LogFilter(
     val isRegex: Boolean = false,
     val isMatchCase: Boolean = false,
     val terms: List<QueryTerm> = emptyList(),
-    val includedTags: List<String> = emptyList(),
-    val excludedTags: List<String> = emptyList(),
 ) {
-    fun isTagVisible(tag: String): Boolean = (includedTags.isEmpty() || tag in includedTags) && tag !in excludedTags
 
     /** True when anything other than package terms narrows the list. */
     val hasNarrowing: Boolean
@@ -25,8 +22,6 @@ data class LogFilter(
             val running = effective()
             return running.query.isNotEmpty() ||
                 levels.size != LogLevel.entries.size ||
-                includedTags.isNotEmpty() ||
-                excludedTags.isNotEmpty() ||
                 running.terms.any { it.key != QueryKey.PACKAGE || it.isNegated }
         }
 
@@ -55,6 +50,14 @@ data class LogFilter(
     }
 
     fun withTerms(added: List<QueryTerm>): LogFilter = copy(terms = (terms + added).distinct())
+
+    /** Replaces every term in the search text with [terms]. The free text stays. */
+    fun withRunningTerms(terms: List<QueryTerm>): LogFilter = withQueryString(
+        text = join(
+            terms = terms,
+            text = effective().query,
+        ),
+    )
 
     /** The whole filter as search text, the form saved in history and favorites. */
     fun toQueryString(): String = join(

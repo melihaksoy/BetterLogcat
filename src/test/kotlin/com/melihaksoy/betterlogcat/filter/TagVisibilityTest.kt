@@ -10,35 +10,48 @@ class TagVisibilityTest {
     private val known = listOf("art", "adbd", "OkHttp", "Garage")
 
     @Test
-    fun `hiding tags adds them to the exclude list`() {
+    fun `hiding tags writes one exclude term into the search text`() {
         val filter = TagVisibility.setVisible(
-            filter = LogFilter(),
+            filter = LogFilter().withQueryString(text = "package:mine timeout"),
             tags = listOf("art", "adbd"),
             isVisible = false,
             knownTags = known,
         )
 
+        assertEquals("package:mine -tag=:art,adbd timeout ", filter.query)
         assertFalse(filter.isTagVisible(tag = "art"))
         assertFalse(filter.isTagVisible(tag = "adbd"))
         assertTrue(filter.isTagVisible(tag = "OkHttp"))
     }
 
     @Test
-    fun `showing a hidden tag removes it from the exclude list`() {
+    fun `showing a hidden tag takes it out of the term`() {
         val filter = TagVisibility.setVisible(
-            filter = LogFilter(excludedTags = listOf("art", "adbd")),
+            filter = LogFilter().withQueryString(text = "-tag=:art,adbd"),
             tags = listOf("art"),
             isVisible = true,
             knownTags = known,
         )
 
-        assertEquals(listOf("adbd"), filter.excludedTags)
+        assertEquals("-tag=:adbd ", filter.query)
+    }
+
+    @Test
+    fun `showing the last hidden tag removes the term`() {
+        val filter = TagVisibility.setVisible(
+            filter = LogFilter().withQueryString(text = "package:mine -tag=:art"),
+            tags = listOf("art"),
+            isVisible = true,
+            knownTags = known,
+        )
+
+        assertEquals("package:mine ", filter.query)
     }
 
     @Test
     fun `show only then add another tag`() {
         val only = TagVisibility.showOnly(
-            filter = LogFilter(),
+            filter = LogFilter().withQueryString(text = "package:mine -tag=:art"),
             tag = "OkHttp",
         )
         val plusGarage = TagVisibility.setVisible(
@@ -48,8 +61,8 @@ class TagVisibilityTest {
             knownTags = known,
         )
 
-        assertTrue(plusGarage.isTagVisible(tag = "OkHttp"))
-        assertTrue(plusGarage.isTagVisible(tag = "Garage"))
+        assertEquals("package:mine tag=:OkHttp ", only.query)
+        assertEquals("package:mine tag=:OkHttp,Garage ", plusGarage.query)
         assertFalse(plusGarage.isTagVisible(tag = "art"))
     }
 
@@ -68,4 +81,49 @@ class TagVisibilityTest {
 
         assertTrue(known.none { none.isTagVisible(tag = it) })
     }
+
+    @Test
+    fun `a long hide list turns into a short show list`() {
+        val many = (1..20).map { "Tag$it" }
+        val hidden = TagVisibility.setVisible(
+            filter = LogFilter(),
+            tags = many,
+            isVisible = false,
+            knownTags = many,
+        )
+        val one = TagVisibility.setVisible(
+            filter = hidden,
+            tags = listOf("Tag7"),
+            isVisible = true,
+            knownTags = many,
+        )
+
+        assertEquals("tag=:Tag7 ", one.query)
+    }
+
+    @Test
+    fun `tags with spaces stay one term`() {
+        val filter = TagVisibility.setVisible(
+            filter = LogFilter(),
+            tags = listOf("Ktor Client", "art"),
+            isVisible = false,
+            knownTags = known,
+        )
+
+        assertEquals("-tag=:\"Ktor Client,art\" ", filter.query)
+        assertFalse(filter.isTagVisible(tag = "Ktor Client"))
+        assertTrue(filter.isTagVisible(tag = "Ktor"))
+    }
+
+    @Test
+    fun `show all clears typed tag terms too`() {
+        val filter = TagVisibility.showAll(filter = LogFilter().withQueryString(text = "package:mine tag:Ok -tag=:art crash"))
+
+        assertEquals("package:mine crash ", filter.query)
+    }
+
+    private fun LogFilter.isTagVisible(tag: String): Boolean = LogFilterMatcher(
+        filter = this,
+        processNames = emptyMap(),
+    ).isTagVisible(tag = tag)
 }

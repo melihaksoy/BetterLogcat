@@ -130,8 +130,6 @@ internal object LogcatPreviewData {
                     isNegated = true,
                 ),
             ),
-            excludedTags = listOf("Choreographer"),
-            includedTags = listOf("AndroidRuntime"),
         ),
     )
 

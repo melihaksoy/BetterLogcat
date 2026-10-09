@@ -73,13 +73,8 @@ class LogFilterTest {
     }
 
     @Test
-    fun `tag include and exclude lists`() {
-        val matcher = matcher(
-            filter = LogFilter(
-                includedTags = listOf("Garage", "Choreographer"),
-                excludedTags = listOf("Choreographer"),
-            ),
-        )
+    fun `exact tag terms take comma lists`() {
+        val matcher = matcher(filter = LogFilter(query = "tag=:Garage,Choreographer -tag=:Choreographer "))
 
         assertTrue(matcher.matches(entry = entry(tag = "Garage")))
         assertFalse(matcher.matches(entry = entry(tag = "Choreographer")))

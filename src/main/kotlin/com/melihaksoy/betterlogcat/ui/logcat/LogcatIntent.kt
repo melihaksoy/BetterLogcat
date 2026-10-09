@@ -53,7 +53,6 @@ sealed interface LogcatIntent {
     data class SelectPackage(val packageFilter: PackageFilter) : LogcatIntent
     data class ShowOnlyTag(val tag: String) : LogcatIntent
     data class HideTag(val tag: String) : LogcatIntent
-    data class RemoveTagFilter(val tag: String) : LogcatIntent
     data class SetTagsVisible(
         val tags: List<String>,
         val isVisible: Boolean,

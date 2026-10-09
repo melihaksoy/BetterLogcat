@@ -208,7 +208,6 @@ class LogcatViewModel(
             is LogcatIntent.SelectPackage -> updateFilter { it.withPackageFilter(packageFilter = intent.packageFilter) }
             is LogcatIntent.ShowOnlyTag -> showOnlyTag(tag = intent.tag)
             is LogcatIntent.HideTag -> hideTag(tag = intent.tag)
-            is LogcatIntent.RemoveTagFilter -> removeTagFilter(tag = intent.tag)
             is LogcatIntent.SetTagsVisible -> setTagsVisible(
                 tags = intent.tags,
                 isVisible = intent.isVisible,
@@ -617,15 +616,6 @@ class LogcatViewModel(
                 tags = tags,
                 isVisible = isVisible,
                 knownTags = knownTags,
-            )
-        }
-    }
-
-    private fun removeTagFilter(tag: String) {
-        updateFilter {
-            it.copy(
-                includedTags = it.includedTags - tag,
-                excludedTags = it.excludedTags - tag,
             )
         }
     }

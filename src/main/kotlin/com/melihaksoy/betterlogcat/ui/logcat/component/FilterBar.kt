@@ -5,10 +5,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.runtime.setValue
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.OutputTransformation
 import androidx.compose.foundation.text.input.placeCursorAtEnd
@@ -30,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,15 +61,11 @@ import com.melihaksoy.betterlogcat.ui.theme.rememberLogColors
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.Outline
-import org.jetbrains.jewel.ui.component.Chip
-import org.jetbrains.jewel.ui.component.Icon
-import org.jetbrains.jewel.ui.component.Link
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.TextField
 import org.jetbrains.jewel.ui.component.Tooltip
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
 
-private const val MAX_TAG_CHIPS = 4
 
 /** Second row: search field and level selector. A third row shows tag chips when any exist. */
 @Composable
@@ -109,13 +103,6 @@ internal fun FilterBar(
                 levels = filter.levels,
                 colors = colors,
                 onToggle = { onIntent(LogcatIntent.ToggleLevel(level = it)) },
-            )
-        }
-        if (filter.includedTags.isNotEmpty() || filter.excludedTags.isNotEmpty()) {
-            TagChips(
-                filter = filter,
-                colors = colors,
-                onIntent = onIntent,
             )
         }
     }
@@ -338,57 +325,6 @@ internal fun LevelSelector(
 }
 
 @Composable
-private fun TagChips(
-    modifier: Modifier = Modifier,
-    filter: LogFilter,
-    colors: LogColors,
-    onIntent: (LogcatIntent) -> Unit,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .horizontalScroll(state = rememberScrollState())
-            .padding(
-                start = 6.dp,
-                end = 6.dp,
-                bottom = 4.dp,
-            ),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(space = 6.dp),
-    ) {
-        filter.includedTags.forEach { tag ->
-            FilterChip(
-                label = BetterLogcatBundle.message("filter.chip.tag", tag),
-                color = colors.tag(tag = tag),
-                isExcluded = false,
-                onRemove = { onIntent(LogcatIntent.RemoveTagFilter(tag = tag)) },
-            )
-        }
-        if (filter.excludedTags.size <= MAX_TAG_CHIPS) {
-            filter.excludedTags.forEach { tag ->
-                FilterChip(
-                    label = BetterLogcatBundle.message("filter.chip.hiddenTag", tag),
-                    color = colors.muted,
-                    isExcluded = true,
-                    onRemove = { onIntent(LogcatIntent.RemoveTagFilter(tag = tag)) },
-                )
-            }
-        } else {
-            FilterChip(
-                label = BetterLogcatBundle.message("filter.chip.hiddenTags", filter.excludedTags.size),
-                color = colors.muted,
-                isExcluded = false,
-                onRemove = { onIntent(LogcatIntent.ShowAllTags) },
-            )
-        }
-        Link(
-            text = BetterLogcatBundle.message("filter.reset"),
-            onClick = { onIntent(LogcatIntent.ResetFilters) },
-        )
-    }
-}
-
-@Composable
 private fun rememberTermColors(colors: LogColors): OutputTransformation {
     val normal = JewelTheme.globalColors.text.normal
     return remember(colors, normal) {
@@ -427,36 +363,6 @@ private fun termColor(
         ?: colors.error
     term.key == QueryKey.PACKAGE -> colors.link
     else -> normal
-}
-
-@Composable
-private fun FilterChip(
-    modifier: Modifier = Modifier,
-    label: String,
-    color: Color,
-    isExcluded: Boolean,
-    onRemove: () -> Unit,
-) {
-    Chip(
-        modifier = modifier.height(22.dp),
-        onClick = onRemove,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(space = 4.dp),
-        ) {
-            Text(
-                text = label,
-                color = color,
-                textDecoration = if (isExcluded) TextDecoration.LineThrough else TextDecoration.None,
-            )
-            Icon(
-                key = AllIconsKeys.General.CloseSmall,
-                contentDescription = BetterLogcatBundle.message("filter.chip.remove"),
-                modifier = Modifier.width(12.dp),
-            )
-        }
-    }
 }
 
 private fun levelName(level: LogLevel): String = when (level) {

@@ -236,11 +236,21 @@ internal fun LogList(
         }
     }
     val coroutineScope = rememberCoroutineScope()
+    // The expand toggle on a row in text selection mode leaves that mode. The message shows expanded
+    // there whatever its real state is, so the toggle always collapses it.
+    val toggleExpanded = { entry: LogEntry ->
+        val selectedCell = textSelection.cellFor(id = entry.id)
+        if (selectedCell != SelectableCell.NONE) textSelection = TextSelectionUiModel()
+        if (selectedCell != SelectableCell.MESSAGE || currentState.isExpanded(entry = entry)) {
+            currentOnIntent(LogcatIntent.ToggleExpanded(id = entry.id))
+        }
+    }
     // Collapse a big entry from anywhere inside it, then show its row.
     val collapseEntry = { entryIndex: Int ->
         currentState.entries.getOrNull(index = entryIndex)?.let { entry ->
             val headerItem = currentLayout.firstItemOf(entryIndex = entryIndex)
-            currentOnIntent(LogcatIntent.ToggleExpanded(id = entry.id))
+            if (textSelection.cellFor(id = entry.id) != SelectableCell.NONE) textSelection = TextSelectionUiModel()
+            if (currentState.isExpanded(entry = entry)) currentOnIntent(LogcatIntent.ToggleExpanded(id = entry.id))
             coroutineScope.launch { listState.scrollToItem(index = headerItem) }
         }
     }
@@ -250,7 +260,43 @@ internal fun LogList(
         layout = layout,
     )
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    var boxCoordinates by remember { mutableStateOf<LayoutCoordinates?>(value = null) }
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxSize()
+            .onGloballyPositioned { boxCoordinates = it }
+            .pointerInput(Unit) {
+                // A press anywhere off the row in text selection mode leaves that mode. Initial pass, so
+                // presses that children consume (expand toggles, footer chips, links, the header) count too.
+                // The list handler below deals with presses on the row itself.
+                awaitEachGesture {
+                    val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                    if (event.type != PointerEventType.Press || !textSelection.isActive) return@awaitEachGesture
+                    val down = event.changes.firstOrNull() ?: return@awaitEachGesture
+                    val inList = listCoordinates?.let { list ->
+                        boxCoordinates?.let { box ->
+                            list.localPositionOf(
+                                sourceCoordinates = box,
+                                relativeToSource = down.position,
+                            )
+                        }
+                    }
+                    val listHeight = listCoordinates?.size?.height ?: 0
+                    val isOnRow = inList != null &&
+                        inList.y >= 0f &&
+                        inList.y < listHeight &&
+                        currentState.entries.getOrNull(
+                            index = currentLayout.itemAt(
+                                item = indexAt(
+                                    listState = listState,
+                                    y = inList.y,
+                                ),
+                            ).entryIndex,
+                        )?.id == textSelection.entryId
+                    if (!isOnRow) textSelection = TextSelectionUiModel()
+                }
+            },
+    ) {
         val columnsWidth = LEADING_SLOT + ROW_HORIZONTAL_PADDING * 2 +
             viewOptions.visibleColumns.sumOf { viewOptions.width(column = it) }.dp
         val isStacked = maxWidth < columnsWidth + MIN_MESSAGE_WIDTH
@@ -321,9 +367,21 @@ internal fun LogList(
                                 )
                                 val ref = currentLayout.itemAt(item = index)
                                 val entry = entries.getOrNull(index = ref.entryIndex) ?: return@awaitEachGesture
-                                // The row in text selection mode belongs to its text box. Taking focus here
-                                // would clear the selection, so leave its clicks and drags alone.
-                                if (currentTextSelection.isActive && entry.id == currentTextSelection.entryId) return@awaitEachGesture
+                                // The text box in text selection mode owns its clicks and drags. Taking focus here
+                                // would clear the selection, so leave them alone. Other cells of that row leave the mode.
+                                // Reads the live state: the box handler may have left the mode in this same press.
+                                if (textSelection.isActive && entry.id == textSelection.entryId) {
+                                    val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+                                    val cell = if (ref.chunk > 0) SelectableCell.MESSAGE else cellAt(
+                                        x = down.position.x,
+                                        yInRow = down.position.y - (item?.offset ?: 0).toFloat(),
+                                        viewOptions = currentState.viewOptions,
+                                        isStacked = currentIsStacked,
+                                        density = this,
+                                    )
+                                    if (cell == textSelection.cell) return@awaitEachGesture
+                                    textSelection = TextSelectionUiModel()
+                                }
                                 focusRequester.requestFocus()
 
                                 // Secondary button, or Ctrl+click on macOS.
@@ -357,7 +415,6 @@ internal fun LogList(
                                     return@awaitEachGesture
                                 }
 
-                                if (entry.id != currentTextSelection.entryId) textSelection = TextSelectionUiModel()
                                 val modifiers = event.keyboardModifiers
                                 val isToggle = if (SystemInfo.isMac) modifiers.isPointerMetaPressed else modifiers.isPointerCtrlPressed
                                 val isExtend = modifiers.isPointerShiftPressed
@@ -467,7 +524,8 @@ internal fun LogList(
                                 isSelectedAbove = state.entries.getOrNull(index = index - 1)?.id in state.selection.selectedIds,
                                 // A split message continues below, so the outline does too.
                                 isSelectedBelow = isNextSelected || pieces != null,
-                                isExpanded = state.isExpanded(entry = entry),
+                                // A message in text selection mode shows in full, so its toggle shows expanded too.
+                                isExpanded = state.isExpanded(entry = entry) || textSelection.cellFor(id = entry.id) == SelectableCell.MESSAGE,
                                 viewOptions = viewOptions,
                                 highlighter = highlighter,
                                 colors = colors,
@@ -475,7 +533,7 @@ internal fun LogList(
                                 isStacked = isStacked,
                                 selectedCell = textSelection.cellFor(id = entry.id),
                                 rawProcessName = state.processNames[entry.pid].orEmpty(),
-                                onToggleExpanded = { onIntent(LogcatIntent.ToggleExpanded(id = entry.id)) },
+                                onToggleExpanded = { toggleExpanded(entry) },
                                 onOpenFrame = { onIntent(LogcatIntent.OpenFrame(frame = it)) },
                             )
                         } else if (pieces != null) {
@@ -493,7 +551,16 @@ internal fun LogList(
                     }
                 }
                 val firstVisibleRef by remember(layout) { derivedStateOf { layout.itemAt(item = listState.firstVisibleItemIndex) } }
-                if (firstVisibleRef.chunk > 0) {
+                // A message in text selection mode is one item, not pieces: show the bar once its top scrolls away.
+                val isInsideTextBox by remember(layout, textSelection) {
+                    derivedStateOf {
+                        textSelection.cell == SelectableCell.MESSAGE &&
+                            listState.firstVisibleItemScrollOffset > 0 &&
+                            layout.entries.getOrNull(index = layout.itemAt(item = listState.firstVisibleItemIndex).entryIndex)?.id == textSelection.entryId
+                    }
+                }
+                val isStickyBarShown = firstVisibleRef.chunk > 0 || isInsideTextBox
+                if (isStickyBarShown) {
                     state.entries.getOrNull(index = firstVisibleRef.entryIndex)?.let { entry ->
                         StickyEntryBar(
                             modifier = Modifier.align(alignment = Alignment.TopStart),
@@ -526,7 +593,8 @@ internal fun LogList(
                         },
                     )
                 }
-                if (textSelection.isActive) {
+                // The hint sits on the sticky bar's actions, so it gives way to the bar.
+                if (textSelection.isActive && !isStickyBarShown) {
                     Text(
                         text = BetterLogcatBundle.message("list.textSelectionHint"),
                         modifier = Modifier

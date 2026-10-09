@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
 import com.melihaksoy.betterlogcat.filter.LogFilter
+import com.melihaksoy.betterlogcat.filter.LogFilterMatcher
 import com.melihaksoy.betterlogcat.ui.logcat.LogcatIntent
 import com.melihaksoy.betterlogcat.ui.logcat.model.SidePanel
 import com.melihaksoy.betterlogcat.ui.logcat.preview.LogcatPreviewData
@@ -72,7 +73,13 @@ internal fun TagsPanel(
             .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key.lowercase() })
             .map { it.key to it.value }
     }
-    val hiddenCount = tagCounts.keys.count { !filter.isTagVisible(tag = it) }
+    val tagMatcher = remember(filter) {
+        LogFilterMatcher(
+            filter = filter,
+            processNames = emptyMap(),
+        )
+    }
+    val hiddenCount = tagCounts.keys.count { !tagMatcher.isTagVisible(tag = it) }
 
     Column(modifier = modifier.background(color = JewelTheme.globalColors.panelBackground)) {
         Row(
@@ -215,7 +222,7 @@ internal fun TagsPanel(
                                 tag = tag,
                                 count = count,
                                 rates = tagRates[tag],
-                                isVisible = filter.isTagVisible(tag = tag),
+                                isVisible = tagMatcher.isTagVisible(tag = tag),
                                 colors = colors,
                                 onVisibleChange = { isVisible ->
                                     onIntent(
@@ -378,7 +385,7 @@ private fun PreviewTagsPanel() {
         TagsPanel(
             tagCounts = LogcatPreviewData.tagCounts,
             appTags = setOf("OkHttp", "GarageApp", "AndroidRuntime"),
-            filter = LogFilter(excludedTags = listOf("art", "adbd")),
+            filter = LogFilter(query = "package:mine -tag=:art,adbd "),
             colors = rememberLogColors(),
             onIntent = {},
         )

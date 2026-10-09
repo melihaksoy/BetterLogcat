@@ -23,19 +23,22 @@ class LogFilterMatcher(
     /** False when the free-text regex or a `~:` term does not compile. Those parts are ignored. */
     val isQueryValid: Boolean = (!running.isRegex || running.query.isEmpty() || regex != null) && compiledTerms.all { it.isValid }
 
-    private val includedTags = running.includedTags.toHashSet()
-    private val excludedTags = running.excludedTags.toHashSet()
+    private val positiveTagTerms = positiveByKey[QueryKey.TAG].orEmpty()
+    private val negativeTagTerms = negatives.filter { it.term.key == QueryKey.TAG }
 
     fun matches(entry: LogEntry): Boolean {
         if (entry.level !in running.levels) return false
-        if (includedTags.isNotEmpty() && entry.tag !in includedTags) return false
-        if (entry.tag in excludedTags) return false
         for ((_, terms) in positiveByKey) {
             if (terms.none { it.matches(entry = entry) }) return false
         }
         if (negatives.any { it.matches(entry = entry) }) return false
         return matchesQuery(entry = entry)
     }
+
+    /** True when the `tag` terms let [tag] through. Other terms do not count. For the Tags panel. */
+    fun isTagVisible(tag: String): Boolean =
+        (positiveTagTerms.isEmpty() || positiveTagTerms.any { it.matchesText(text = tag) }) &&
+            negativeTagTerms.none { it.matchesText(text = tag) }
 
     /** Character ranges in [text] that match the free-text query, for highlight. */
     fun highlights(text: String): List<IntRange> {
@@ -94,6 +97,8 @@ class LogFilterMatcher(
         } else {
             null
         }
+        /** `=:` takes a comma list: `tag=:OkHttp,Garage` is either tag. */
+        private val exactValues: Set<String> = term.value.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toHashSet()
         private val level: LogLevel? = parseLevel(value = term.value)
         private val ageMillis: Long? = parseAge(value = term.value)
 
@@ -127,17 +132,17 @@ class LogFilterMatcher(
                 return projectAppIds.isEmpty() || process.substringBefore(':') in projectAppIds
             }
             return when (term.mode) {
-                MatchMode.EXACT -> process.substringBefore(':') == term.value
+                MatchMode.EXACT -> process.substringBefore(':') in exactValues
                 else -> matchesText(text = process)
             }
         }
 
-        private fun matchesText(text: String): Boolean = when (term.mode) {
+        fun matchesText(text: String): Boolean = when (term.mode) {
             MatchMode.CONTAINS -> text.contains(
                 other = term.value,
                 ignoreCase = true,
             )
-            MatchMode.EXACT -> text == term.value
+            MatchMode.EXACT -> text in exactValues
             MatchMode.REGEX -> regex?.containsMatchIn(input = text) == true
         }
 
