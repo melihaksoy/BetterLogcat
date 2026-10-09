@@ -24,6 +24,12 @@ class QuerySuggestionsTest {
     }
 
     @Test
+    fun `a fully typed key stays suggested until the colon`() {
+        assertEquals(listOf("tag:"), suggest(text = "tag").items.map { it.label })
+        assertEquals("tag:", suggest(text = "-tag").items.single().replacement.removePrefix("-"))
+    }
+
+    @Test
     fun `an empty token lists every key`() {
         val list = suggest(text = "timeout ")
 

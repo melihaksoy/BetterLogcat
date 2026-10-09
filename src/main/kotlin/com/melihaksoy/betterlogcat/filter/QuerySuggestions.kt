@@ -81,7 +81,7 @@ object QuerySuggestions {
         prefix: String,
         negation: String,
     ): List<Suggestion> = QueryKey.entries
-        .filter { it.token.startsWith(prefix, ignoreCase = true) && it.token != prefix }
+        .filter { it.token.startsWith(prefix, ignoreCase = true) }
         .flatMap { key ->
             val keySuggestion = Suggestion(
                 label = "${key.token}:",
