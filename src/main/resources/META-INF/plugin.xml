@@ -33,6 +33,7 @@
         <toolWindow
             id="Better Logcat"
             anchor="bottom"
+            canCloseContents="true"
             icon="/icons/betterLogcat.svg"
             factoryClass="com.melihaksoy.betterlogcat.toolwindow.BetterLogcatToolWindowFactory"/>
         <notificationGroup id="Better Logcat" displayType="BALLOON" key="notification.group"/>

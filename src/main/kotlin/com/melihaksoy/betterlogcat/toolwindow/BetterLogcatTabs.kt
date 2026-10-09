@@ -1,11 +1,12 @@
 package com.melihaksoy.betterlogcat.toolwindow
 
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.wm.ToolWindow
+import com.intellij.openapi.wm.ex.ToolWindowEx
+import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.content.Content
 import com.intellij.ui.content.ContentFactory
 import com.intellij.ui.content.ContentManagerEvent
@@ -42,7 +43,6 @@ class BetterLogcatTabs(
             object : ContentManagerListener {
                 override fun contentRemoved(event: ContentManagerEvent) {
                     trees.remove(event.content)
-                    reopenWhenEmpty()
                 }
             },
         )
@@ -81,12 +81,12 @@ class BetterLogcatTabs(
         toolWindow.contentManager.setSelectedContent(content)
     }
 
-    private fun reopenWhenEmpty() {
-        ApplicationManager.getApplication().invokeLater(
-            {
-                if (!toolWindow.isDisposed && toolWindow.contentManager.contentCount == 0) addTab()
-            },
-            project.disposed,
-        )
+    /** Shown when every tab is closed: the tool window stays open with a link to a new tab. */
+    fun setUpEmptyState() {
+        val toolWindowEx = toolWindow as? ToolWindowEx ?: return
+        toolWindowEx.setToHideOnEmptyContent(false)
+        toolWindowEx.emptyText
+            ?.setText(BetterLogcatBundle.message("tabs.empty"))
+            ?.appendLine(BetterLogcatBundle.message("tab.new"), SimpleTextAttributes.LINK_PLAIN_ATTRIBUTES) { addTab() }
     }
 }

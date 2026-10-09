@@ -30,6 +30,7 @@ class BetterLogcatToolWindowFactory : ToolWindowFactory, DumbAware {
         // Tab actions sit right after the last tab, like the Terminal "+".
         val toolWindowEx = toolWindow as? ToolWindowEx
         if (toolWindowEx != null) toolWindowEx.setTabActions(newTab) else toolWindow.setTitleActions(listOf(newTab))
+        tabs.setUpEmptyState()
         tabs.addTab()
     }
 }
