@@ -418,6 +418,8 @@ internal fun LogList(
                                 val modifiers = event.keyboardModifiers
                                 val isToggle = if (SystemInfo.isMac) modifiers.isPointerMetaPressed else modifiers.isPointerCtrlPressed
                                 val isExtend = modifiers.isPointerShiftPressed
+                                // A plain click on the only selected row deselects it, on release, so drags still work.
+                                val wasOnlySelected = currentState.selection.selectedIds.singleOrNull() == entry.id
                                 currentOnIntent(
                                     LogcatIntent.PressRow(
                                         id = entry.id,
@@ -442,6 +444,7 @@ internal fun LogList(
                                 }
 
                                 var lastIndex = index
+                                var hasMovedOff = false
                                 while (true) {
                                     val move = awaitPointerEvent()
                                     val change = move.changes.firstOrNull { it.id == down.id } ?: break
@@ -457,6 +460,7 @@ internal fun LogList(
                                     val current = currentState.entries.getOrNull(index = currentLayout.itemAt(item = currentIndex).entryIndex) ?: continue
                                     if (currentIndex != lastIndex) {
                                         lastIndex = currentIndex
+                                        hasMovedOff = true
                                         currentOnIntent(
                                             LogcatIntent.DragSelect(
                                                 anchorId = entry.id,
@@ -465,6 +469,7 @@ internal fun LogList(
                                         )
                                     }
                                 }
+                                if (wasOnlySelected && !hasMovedOff) currentOnIntent(LogcatIntent.ClearSelection)
                             }
                         },
                     state = listState,
