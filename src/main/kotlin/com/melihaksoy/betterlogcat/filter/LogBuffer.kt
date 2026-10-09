@@ -197,7 +197,7 @@ class LogBuffer(capacity: Int) {
         const val MIN_CAPACITY = 1_000
         const val MAX_PIDS_PER_TAG = 16
         const val RATE_SECONDS = 30
-        const val MERGE_LOOK_BACK = 8
+        const val MERGE_LOOK_BACK = 64
 
         /** Chunking loggers split between 3000 and 4000 chars, at a line break when they can. */
         const val CHUNK_MIN = 3_000
