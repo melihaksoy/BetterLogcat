@@ -18,10 +18,11 @@ multi-line messages, long JSON, copying, and a busy toolbar.
 
 **Filtering and finding**
 - Studio-style search terms in the search bar, colored and editable, with autocomplete (Ctrl+Space):
-  `package:mine`, `tag:`, `-tag:`, `tag~:regex`, `level:W`, `message:`, `line:`, `process:`, `pid:`, `age:5m`,
+  `package:mine`, `tag:`, `-tag:`, `tag=:a,b` (exact, comma list), `tag~:regex`, `level:W`, `message:`, `line:`, `process:`, `pid:`, `age:5m`,
   `is:crash`, `is:stacktrace`, `is:json`, `name:`.
 - Favorites and history behind the funnel button, with match counts. The last filter is restored.
-- Level toggles, a Tags panel (your app vs. other, counts, per-second sparklines, show only / hide).
+- Level toggles, a Tags panel (your app vs. other, counts, per-second sparklines, show only / hide). The panel
+  writes `tag=:` / `-tag=:` terms into the search text, so tag choices are editable and saved with the filter.
 - Find bar (Cmd/Ctrl+F) that moves between matches without changing the filters.
 
 **Working with entries**

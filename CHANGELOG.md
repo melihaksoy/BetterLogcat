@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0
+- Tags panel choices live in the search text as `tag=:a,b` / `-tag=:a,b` terms: editable, saved in favorites and history, restored next session.
+- `=:` terms take comma lists (`tag=:OkHttp,Garage`, `package=:a,b`).
+- Info and actions (size, Copy JSON, Open, Expand/Collapse) sit on their own strip under the message.
+- Resizable side panels; the Network panel shows the selected call's request and response.
+- Copy JSON and Open look like buttons, not links.
+
 ## 0.9.0
 - Gutter with bookmarks, crash and network icons and quick actions.
 - Network panel: Ktor and OkHttp calls paired, status, time, Copy as cURL.
