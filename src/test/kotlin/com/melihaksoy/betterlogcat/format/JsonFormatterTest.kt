@@ -100,4 +100,25 @@ class JsonFormatterTest {
             tokens.map { it.kind },
         )
     }
+
+    @Test
+    fun `a body cut off by the logger is still indented`() {
+        val json = JsonFormatter.detect(message = "RESPONSE: 200\n{\"items\":[{\"id\":1,\"title\":\"a, b\"},{\"id\":2,\"ti") as JsonContent.Found
+
+        assertEquals(
+            "{\n  \"items\": [\n    {\n      \"id\": 1,\n      \"title\": \"a, b\"\n    },\n    {\n      \"id\": 2,\n      \"ti",
+            json.main.pretty,
+        )
+    }
+
+    @Test
+    fun `balanced json that does not parse is indented, not left raw`() {
+        // A line break inside a string, as a lost chunk boundary leaves it.
+        val message = "{\"data\":{\"name\":\"Volks\nwagen\"},\"empty\":[]}"
+        val json = JsonFormatter.detect(message = message) as JsonContent.Found
+
+        assertTrue(!json.main.isComplete)
+        assertEquals(message, json.main.raw)
+        assertEquals("{\n  \"data\": {\n    \"name\": \"Volks\nwagen\"\n  },\n  \"empty\": []\n}", json.main.pretty)
+    }
 }

@@ -14,7 +14,8 @@ object JsonFormatter {
 
     private const val MAX_FAILED_ATTEMPTS = 8
     private const val MAX_BLOCKS = 24
-    private val jsonStart = Regex(pattern = """[{\[]\s*["{\[]""")
+    /** Stricter start for parts that do not parse: a quote right after the brackets, so `[{id=7}]` (a Bundle) is not JSON. */
+    private val lenientStart = Regex(pattern = """[{\[]\s*(?:[{\[]\s*)?"""")
 
     /**
      * Finds every JSON object or array (with at least one string) in a message. Text may sit around
@@ -36,25 +37,26 @@ object JsonFormatter {
                 start = start,
             )
             if (end < 0) {
-                if (jsonStart.matchesAt(input = message, index = start)) {
-                    val raw = message.substring(start)
-                    blocks += JsonBlock(
+                if (lenientStart.matchesAt(input = message, index = start)) {
+                    blocks += lenientBlock(
+                        message = message,
                         start = start,
                         end = message.length,
-                        raw = raw,
-                        pretty = raw,
-                        minified = raw,
-                        isComplete = false,
-                        isInline = false,
                     )
                 }
                 break
             }
+            // Brackets that balance but do not parse (a piece lost between chunks, a broken string)
+            // still read as JSON when they open like JSON.
             val block = completeBlock(
                 message = message,
                 start = start,
                 end = end + 1,
-            )
+            ) ?: lenientBlock(
+                message = message,
+                start = start,
+                end = end + 1,
+            ).takeIf { lenientStart.matchesAt(input = message, index = start) }
             if (block == null) {
                 failed++
                 index = start + 1
@@ -100,6 +102,88 @@ object JsonFormatter {
             isComplete = true,
             isInline = false,
         )
+    }
+
+    /** A part that does not parse: indented by [lenientPretty], copied as it is. */
+    private fun lenientBlock(
+        message: String,
+        start: Int,
+        end: Int,
+    ): JsonBlock {
+        val raw = message.substring(start, end)
+        return JsonBlock(
+            start = start,
+            end = end,
+            raw = raw,
+            pretty = lenientPretty(json = raw),
+            minified = raw,
+            isComplete = false,
+            isInline = false,
+        )
+    }
+
+    /**
+     * Indents JSON that does not parse, so a body cut off by the logger still reads like JSON. Walks
+     * brackets, commas and colons outside strings and never fails. Text inside strings stays as it is.
+     */
+    fun lenientPretty(json: String): String {
+        val out = StringBuilder(json.length + json.length / 4)
+        var depth = 0
+        var isInString = false
+        var index = 0
+        while (index < json.length) {
+            val char = json[index]
+            if (isInString) {
+                out.append(char)
+                if (char == '\\' && index + 1 < json.length) {
+                    out.append(json[index + 1])
+                    index++
+                } else if (char == '"') {
+                    isInString = false
+                }
+            } else {
+                when (char) {
+                    '"' -> {
+                        out.append(char)
+                        isInString = true
+                    }
+                    '{', '[' -> {
+                        var next = index + 1
+                        while (next < json.length && json[next].isWhitespace()) next++
+                        if (next < json.length && (json[next] == '}' || json[next] == ']')) {
+                            out.append(char).append(json[next])
+                            index = next
+                        } else {
+                            depth++
+                            out.append(char)
+                            lenientNewLine(out = out, depth = depth)
+                        }
+                    }
+                    '}', ']' -> {
+                        depth = (depth - 1).coerceAtLeast(minimumValue = 0)
+                        lenientNewLine(out = out, depth = depth)
+                        out.append(char)
+                    }
+                    ',' -> {
+                        out.append(char)
+                        lenientNewLine(out = out, depth = depth)
+                    }
+                    ':' -> out.append(": ")
+                    ' ', '\t', '\n', '\r' -> Unit
+                    else -> out.append(char)
+                }
+            }
+            index++
+        }
+        return out.toString()
+    }
+
+    private fun lenientNewLine(
+        out: StringBuilder,
+        depth: Int,
+    ) {
+        out.append('\n')
+        repeat(times = depth) { out.append(INDENT) }
     }
 
     /** True when only spaces sit between the previous line break (or the start) and [index]. */

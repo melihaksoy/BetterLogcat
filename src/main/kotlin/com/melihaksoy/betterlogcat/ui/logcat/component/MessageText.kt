@@ -194,7 +194,8 @@ private fun AnnotatedString.Builder.appendExpandedJson(
     var cursor = 0
     var needsBreak = false
     json.blocks.sortedBy { it.start }.forEach { block ->
-        val isPretty = prettyJson && block.isComplete && !block.isInline
+        // Incomplete parts have a lenient pretty form too, so a cut-off body is still indented.
+        val isPretty = prettyJson && !block.isInline
         var before = message.substring(cursor, block.start)
         if (needsBreak && before.isNotEmpty() && !before.startsWith('\n')) before = "\n" + before
         if (isPretty) {
