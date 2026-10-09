@@ -22,6 +22,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import com.melihaksoy.betterlogcat.model.HighlightRule
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.lazy.items
 import com.melihaksoy.betterlogcat.model.LogLevel
 import com.melihaksoy.betterlogcat.format.StackFrame
@@ -99,6 +106,8 @@ internal fun LogList(
     modifier: Modifier = Modifier,
     state: LogcatState,
     colors: LogColors,
+    isFindOpen: Boolean = false,
+    onFindOpenChange: (Boolean) -> Unit = {},
     onIntent: (LogcatIntent) -> Unit,
     onRowMenu: (LogEntry, Point) -> Unit,
 ) {
@@ -120,7 +129,55 @@ internal fun LogList(
         SearchHighlighter.from(filter = state.filter)
     }
     val textStyle = JewelTheme.editorTextStyle
-    val keywords = remember(state.highlightRules) { KeywordHighlighter(rules = state.highlightRules) }
+    // Find: matches in the visible list, without touching the filters.
+    val findState = rememberTextFieldState()
+    val findQuery = findState.text.toString().trim()
+    var findMatches by remember { mutableStateOf(value = IntArray(size = 0)) }
+    var findCurrent by remember { mutableIntStateOf(value = 0) }
+    LaunchedEffect(isFindOpen, findQuery) {
+        if (!isFindOpen || findQuery.isEmpty()) {
+            findMatches = IntArray(size = 0)
+            return@LaunchedEffect
+        }
+        delay(timeMillis = FIND_DEBOUNCE_MILLIS)
+        snapshotFlow { currentState.entries }.collectLatest { entries ->
+            findMatches = withContext(context = Dispatchers.Default) {
+                entries.indices.filter {
+                    entries[it].message.contains(other = findQuery, ignoreCase = true) ||
+                        entries[it].tag.contains(other = findQuery, ignoreCase = true)
+                }.toIntArray()
+            }
+            if (findCurrent >= findMatches.size) findCurrent = 0
+            delay(timeMillis = FIND_REFRESH_MILLIS)
+        }
+    }
+    val goToMatch = { delta: Int ->
+        val matches = findMatches
+        if (matches.isNotEmpty()) {
+            findCurrent = Math.floorMod(findCurrent + delta, matches.size)
+            currentState.entries.getOrNull(index = matches[findCurrent])?.let { match ->
+                currentOnIntent(
+                    LogcatIntent.PressRow(
+                        id = match.id,
+                        isExtend = false,
+                        isToggle = false,
+                    ),
+                )
+            }
+        }
+    }
+    val findRule = if (isFindOpen && findQuery.isNotEmpty()) {
+        listOf(
+            HighlightRule(
+                pattern = findQuery,
+                colorArgb = FIND_COLOR,
+                isRegex = false,
+            ),
+        )
+    } else {
+        emptyList()
+    }
+    val keywords = remember(state.highlightRules, findRule) { KeywordHighlighter(rules = state.highlightRules + findRule) }
     val labels = remember { messageLabels() }
     val levelTextColors = LogLevel.entries.associateWith {
         messageColor(
@@ -205,6 +262,7 @@ internal fun LogList(
                                 state = currentState,
                                 isTextSelecting = currentTextSelection.isActive,
                                 onExitTextSelection = { textSelection = TextSelectionUiModel() },
+                                onOpenFind = { onFindOpenChange(true) },
                                 onContextMenu = {
                                     val leadIndex = currentState.entries.binarySearch { it.id.compareTo(other = currentState.selection.leadId) }
                                     val lead = currentState.entries.getOrNull(index = leadIndex)
@@ -384,6 +442,26 @@ internal fun LogList(
                         }
                     }
                 }
+                if (isFindOpen) {
+                    FindBar(
+                        modifier = Modifier
+                            .align(alignment = Alignment.TopEnd)
+                            .padding(
+                                top = 6.dp,
+                                end = 20.dp,
+                            ),
+                        queryState = findState,
+                        matchCount = findMatches.size,
+                        currentMatch = findCurrent,
+                        colors = colors,
+                        onNext = { goToMatch(1) },
+                        onPrevious = { goToMatch(-1) },
+                        onClose = {
+                            onFindOpenChange(false)
+                            focusRequester.requestFocus()
+                        },
+                    )
+                }
                 if (textSelection.isActive) {
                     Text(
                         text = BetterLogcatBundle.message("list.textSelectionHint"),
@@ -530,10 +608,16 @@ private fun handleKey(
     state: LogcatState,
     isTextSelecting: Boolean,
     onExitTextSelection: () -> Unit,
+    onOpenFind: () -> Unit,
     onContextMenu: () -> Unit,
     onIntent: (LogcatIntent) -> Unit,
 ): Boolean {
     if (event.type != KeyEventType.KeyDown) return false
+    val isFindKey = event.key == Key.F && (if (SystemInfo.isMac) event.isMetaPressed else event.isCtrlPressed)
+    if (isFindKey) {
+        onOpenFind()
+        return true
+    }
     // Shift+F10 or the menu key opens the row menu, as in other IDE lists.
     if ((event.key == Key.F10 && event.isShiftPressed) || event.key == Key.Menu) {
         onContextMenu()
@@ -681,6 +765,9 @@ private fun buildLayout(
 }
 
 private const val SPLIT_MIN_CHARS = 2_000
+private const val FIND_DEBOUNCE_MILLIS = 120L
+private const val FIND_REFRESH_MILLIS = 400L
+private const val FIND_COLOR = 0xFFFF9F1AL
 private const val LINES_PER_PIECE = 20
 private const val KEY_MENU_X = 40f
 

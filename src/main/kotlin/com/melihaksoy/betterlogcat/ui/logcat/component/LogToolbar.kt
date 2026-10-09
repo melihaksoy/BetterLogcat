@@ -39,6 +39,7 @@ internal fun LogToolbar(
     colors: LogColors,
     popups: LogcatPopups,
     paneActions: PaneActions,
+    onFind: () -> Unit = {},
     onIntent: (LogcatIntent) -> Unit,
 ) {
     Row(
@@ -82,6 +83,11 @@ internal fun LogToolbar(
                 onClick = popups::showPackagePicker,
             )
         }
+        ToolbarIconButton(
+            iconKey = AllIconsKeys.Actions.Find,
+            tooltip = BetterLogcatBundle.message("toolbar.find"),
+            onClick = onFind,
+        )
         ToolbarIconButton(
             iconKey = if (state.isPaused) AllIconsKeys.Actions.Resume else AllIconsKeys.Actions.Pause,
             tooltip = BetterLogcatBundle.message(if (state.isPaused) "toolbar.resume" else "toolbar.pause"),

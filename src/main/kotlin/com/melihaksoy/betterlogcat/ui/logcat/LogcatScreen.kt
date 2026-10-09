@@ -13,6 +13,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -106,6 +108,7 @@ internal fun LogcatContent(
     paneActions: PaneActions,
     onIntent: (LogcatIntent) -> Unit,
 ) {
+    var isFindOpen by remember { mutableStateOf(value = false) }
     val baseColors = rememberLogColors()
     val colors = remember(baseColors, state.levelColors) { baseColors.withLevelColors(overrides = state.levelColors) }
     Column(
@@ -118,6 +121,7 @@ internal fun LogcatContent(
             colors = colors,
             popups = popups,
             paneActions = paneActions,
+            onFind = { isFindOpen = true },
             onIntent = onIntent,
         )
         val suggestionContext = remember(state.packages, state.tagCounts, state.processNames) {
@@ -150,6 +154,8 @@ internal fun LogcatContent(
                     state = state,
                     colors = colors,
                     popups = popups,
+                    isFindOpen = isFindOpen,
+                    onFindOpenChange = { isFindOpen = it },
                     onIntent = onIntent,
                 )
             }
@@ -187,6 +193,8 @@ private fun MainArea(
     state: LogcatState,
     colors: LogColors,
     popups: LogcatPopups,
+    isFindOpen: Boolean,
+    onFindOpenChange: (Boolean) -> Unit,
     onIntent: (LogcatIntent) -> Unit,
 ) {
     when (val content = state.content) {
@@ -235,6 +243,8 @@ private fun MainArea(
                 modifier = modifier,
                 state = state,
                 colors = colors,
+                isFindOpen = isFindOpen,
+                onFindOpenChange = onFindOpenChange,
                 onIntent = onIntent,
                 onRowMenu = { entry, point ->
                     popups.showRowMenu(
