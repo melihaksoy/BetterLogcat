@@ -50,6 +50,15 @@ intellijPlatform {
             untilBuild = provider { null }
         }
     }
+    // Secrets come from the environment only, never from the repository.
+    signing {
+        certificateChain = providers.environmentVariable("CERTIFICATE_CHAIN")
+        privateKey = providers.environmentVariable("PRIVATE_KEY")
+        password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
+    }
+    publishing {
+        token = providers.environmentVariable("PUBLISH_TOKEN")
+    }
     pluginVerification {
         ides {
             // Comma-separated local installs, e.g. the oldest and newest supported Studio.
