@@ -625,7 +625,10 @@ internal fun LogList(
                         .align(alignment = Alignment.CenterEnd)
                         .fillMaxHeight(),
                 )
-                if (!isFollowing && state.entries.isNotEmpty()) {
+                // Only with logs below the view. Follow mode can stop while the list is already at its end (a
+                // selected row, a filter that made it shorter); then there is nothing to jump to, and following
+                // only comes back once the end is reached again, so the button would never go away.
+                if (!isFollowing && listState.canScrollForward && state.entries.isNotEmpty()) {
                     JumpToLatestButton(
                         modifier = Modifier
                             .align(alignment = Alignment.BottomEnd)
