@@ -95,6 +95,7 @@ import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.VerticalScrollbar
 import java.awt.Point
 import kotlin.math.roundToInt
+import com.melihaksoy.betterlogcat.model.TagDescriptions
 
 private const val DOUBLE_CLICK_MILLIS = 400L
 private val MENU_OFFSET = Offset(x = 4f, y = 4f)
@@ -510,6 +511,10 @@ internal fun LogList(
                             )
                             LogRow(
                                 gutter = gutter,
+                                tagDescription = TagDescriptions.describe(
+                                    tag = entry.tag,
+                                    userNotes = state.tagNotes,
+                                ),
                                 onCopyJson = { onIntent(LogcatIntent.CopyEntry(id = entry.id, mode = CopyMode.JSON_PRETTY)) },
                                 onOpenInEditor = { onOpenInEditor(entry) },
                                 onGutterClick = { point ->

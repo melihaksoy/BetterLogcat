@@ -217,6 +217,10 @@ internal fun LogcatContent(
                             appTags = appTags,
                             filter = state.filter,
                             colors = colors,
+                            tagNotes = state.tagNotes,
+                            tagGroups = state.tagGroups,
+                            onTagMenu = popups::showTagMenu,
+                            onGroupMenu = popups::showTagGroupMenu,
                             onIntent = onIntent,
                         )
                     }

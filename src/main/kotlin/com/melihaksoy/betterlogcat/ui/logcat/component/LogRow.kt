@@ -46,6 +46,7 @@ import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Icon
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
+import org.jetbrains.jewel.ui.component.Tooltip
 
 internal val CELL_GAP = 8.dp
 internal val EXPAND_SLOT = 18.dp
@@ -74,6 +75,8 @@ internal fun LogRow(
     isSelectedBelow: Boolean = false,
     rawProcessName: String = processName,
     gutter: GutterUiModel = GutterUiModel.None,
+    /** Shown when the pointer rests on the tag; null shows nothing. */
+    tagDescription: String? = null,
     onGutterClick: (Point) -> Unit = {},
     onCopyJson: () -> Unit = {},
     onOpenInEditor: () -> Unit = {},
@@ -121,6 +124,7 @@ internal fun LogRow(
                     processName = processName,
                     rawProcessName = rawProcessName,
                     selectedCell = selectedCell,
+                    tagDescription = tagDescription,
                     isExpanded = isExpanded,
                     viewOptions = viewOptions,
                     colors = colors,
@@ -161,6 +165,7 @@ internal fun LogRow(
                 processName = processName,
                 rawProcessName = rawProcessName,
                 selectedCell = selectedCell,
+                tagDescription = tagDescription,
                 isExpanded = isExpanded,
                 viewOptions = viewOptions,
                 colors = colors,
@@ -216,6 +221,7 @@ private fun HeaderCells(
     processName: String,
     rawProcessName: String,
     selectedCell: SelectableCell,
+    tagDescription: String?,
     isExpanded: Boolean,
     viewOptions: ViewOptionsUiModel,
     colors: LogColors,
@@ -278,6 +284,7 @@ private fun HeaderCells(
                 textStyle = textStyle,
                 colors = colors,
                 isSelecting = selectedCell == SelectableCell.TAG,
+                tooltip = tagDescription,
             )
         }
         if (LogColumn.LEVEL in viewOptions.visibleColumns) {
@@ -327,6 +334,7 @@ private fun Cell(
     textStyle: TextStyle,
     colors: LogColors,
     isSelecting: Boolean,
+    tooltip: String? = null,
 ) {
     if (isSelecting) {
         SelectableText(
@@ -338,6 +346,21 @@ private fun Cell(
             textStyle = textStyle,
             colors = colors,
         )
+    } else if (tooltip != null && text.isNotEmpty()) {
+        Tooltip(
+            tooltip = { Text(text = tooltip) },
+            modifier = modifier
+                .width(widthDp.dp)
+                .padding(end = CELL_GAP),
+        ) {
+            Text(
+                text = text,
+                color = color,
+                style = textStyle,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     } else {
         Text(
             text = text,

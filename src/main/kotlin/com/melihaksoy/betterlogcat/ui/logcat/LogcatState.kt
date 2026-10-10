@@ -14,6 +14,8 @@ import com.melihaksoy.betterlogcat.ui.logcat.model.NetworkDetailUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SavedFiltersUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SelectionUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.ViewOptionsUiModel
+import com.melihaksoy.betterlogcat.model.TagDescriptions
+import com.melihaksoy.betterlogcat.model.TagGroup
 
 /**
  * The toolbar shows in every state, so the screen state is one class. The distinct
@@ -40,6 +42,10 @@ data class LogcatState(
     /** The user's own keywords, for the settings window. */
     val ownHighlightRules: List<HighlightRule> = emptyList(),
     val presetHighlights: PresetHighlights = PresetHighlights(),
+    /** The user's own tag descriptions, by tag. Built-in ones are in [TagDescriptions]. */
+    val tagNotes: Map<String, String> = emptyMap(),
+    /** Tag groups the user made in the Tags panel. */
+    val tagGroups: List<TagGroup> = emptyList(),
     val tagCounts: Map<String, Int> = emptyMap(),
     /** Process ids seen per tag. */
     val tagPids: Map<String, Set<Int>> = emptyMap(),

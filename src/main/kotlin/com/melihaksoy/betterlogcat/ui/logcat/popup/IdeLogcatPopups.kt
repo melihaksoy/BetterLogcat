@@ -44,6 +44,9 @@ import com.melihaksoy.betterlogcat.ui.viewsettings.ViewSettingsDialog
 import kotlinx.coroutines.flow.StateFlow
 import java.awt.Point
 import javax.swing.JComponent
+import com.intellij.openapi.ui.InputValidator
+import com.melihaksoy.betterlogcat.model.TagDescriptions
+import com.melihaksoy.betterlogcat.model.TagGroups
 
 class IdeLogcatPopups(
     private val project: Project,
@@ -132,6 +135,7 @@ class IdeLogcatPopups(
         group.addSeparator()
         group.add(action(text = BetterLogcatBundle.message("menu.showOnlyTag", entry.tag)) { onIntent(LogcatIntent.ShowOnlyTag(tag = entry.tag)) })
         group.add(action(text = BetterLogcatBundle.message("menu.hideTag", entry.tag)) { onIntent(LogcatIntent.HideTag(tag = entry.tag)) })
+        group.add(action(text = BetterLogcatBundle.message("tags.menu.editNoteOf", entry.tag)) { editTagNote(tag = entry.tag) })
         if (processName.isNotEmpty()) {
             group.add(
                 action(text = BetterLogcatBundle.message("menu.showOnlyPackage", processName)) {
@@ -164,6 +168,150 @@ class IdeLogcatPopups(
             at = at,
             group = group,
         )
+    }
+
+    override fun showTagMenu(
+        tag: String,
+        at: Point,
+    ) {
+        val current = state()
+        val group = DefaultActionGroup()
+        group.add(action(text = BetterLogcatBundle.message("tags.menu.editNote")) { editTagNote(tag = tag) })
+        if (!current.tagNotes[tag].isNullOrBlank()) {
+            group.add(
+                action(text = BetterLogcatBundle.message("tags.menu.resetNote")) {
+                    onIntent(
+                        LogcatIntent.SetTagNote(
+                            tag = tag,
+                            note = "",
+                        ),
+                    )
+                },
+            )
+        }
+        group.addSeparator()
+        val currentGroup = TagGroups.groupOf(
+            groups = current.tagGroups,
+            tag = tag,
+        )
+        val moveTo = DefaultActionGroup(BetterLogcatBundle.message("tags.menu.addToGroup"), true)
+        val otherGroups = current.tagGroups.filter { it.name != currentGroup?.name }
+        otherGroups.forEach { target ->
+            moveTo.add(
+                action(text = target.name) {
+                    onIntent(
+                        LogcatIntent.AddTagToGroup(
+                            tag = tag,
+                            groupName = target.name,
+                        ),
+                    )
+                },
+            )
+        }
+        if (otherGroups.isNotEmpty()) moveTo.addSeparator()
+        moveTo.add(action(text = BetterLogcatBundle.message("tags.menu.newGroup")) { addToNewGroup(tag = tag) })
+        group.add(moveTo)
+        if (currentGroup != null) {
+            group.add(
+                action(text = BetterLogcatBundle.message("tags.menu.removeFromGroup", currentGroup.name)) {
+                    onIntent(LogcatIntent.RemoveTagFromGroup(tag = tag))
+                },
+            )
+        }
+        group.addSeparator()
+        group.add(action(text = BetterLogcatBundle.message("menu.showOnlyTag", tag)) { onIntent(LogcatIntent.ShowOnlyTag(tag = tag)) })
+        group.add(action(text = BetterLogcatBundle.message("menu.hideTag", tag)) { onIntent(LogcatIntent.HideTag(tag = tag)) })
+        showMenu(
+            at = at,
+            group = group,
+        )
+    }
+
+    override fun showTagGroupMenu(
+        groupName: String,
+        at: Point,
+    ) {
+        val tagGroup = state().tagGroups.firstOrNull { it.name == groupName } ?: return
+        val group = DefaultActionGroup()
+        if (tagGroup.tags.isNotEmpty()) {
+            group.add(
+                action(text = BetterLogcatBundle.message("tags.menu.showOnlyGroup")) {
+                    onIntent(LogcatIntent.ShowOnlyTags(tags = tagGroup.tags))
+                },
+            )
+            group.addSeparator()
+        }
+        group.add(action(text = BetterLogcatBundle.message("tags.menu.renameGroup")) { renameGroup(name = groupName) })
+        group.add(action(text = BetterLogcatBundle.message("tags.menu.deleteGroup")) { onIntent(LogcatIntent.DeleteTagGroup(name = groupName)) })
+        showMenu(
+            at = at,
+            group = group,
+        )
+    }
+
+    /** Asks for a description of [tag], filled with the current one. Empty goes back to the built-in one. */
+    private fun editTagNote(tag: String) {
+        val notes = state().tagNotes
+        val current = TagDescriptions.describe(
+            tag = tag,
+            userNotes = notes,
+        ).orEmpty()
+        val note = Messages.showInputDialog(
+            project,
+            BetterLogcatBundle.message("tags.note.prompt", tag),
+            BetterLogcatBundle.message("tags.note.title"),
+            null,
+            current,
+            null,
+        ) ?: return
+        // Saving the built-in text as is would only hide later fixes to it.
+        if (notes[tag] == null && note.trim() == TagDescriptions.builtIn[tag]) return
+        onIntent(
+            LogcatIntent.SetTagNote(
+                tag = tag,
+                note = note,
+            ),
+        )
+    }
+
+    private fun addToNewGroup(tag: String) {
+        val name = askGroupName(initial = "") ?: return
+        onIntent(
+            LogcatIntent.AddTagToGroup(
+                tag = tag,
+                groupName = name,
+            ),
+        )
+    }
+
+    private fun renameGroup(name: String) {
+        val newName = askGroupName(initial = name) ?: return
+        onIntent(
+            LogcatIntent.RenameTagGroup(
+                from = name,
+                to = newName,
+            ),
+        )
+    }
+
+    /** A group name: not blank and not taken by another group. Null when cancelled. */
+    private fun askGroupName(initial: String): String? {
+        val taken = state().tagGroups.map { it.name }.toSet() - initial
+        return Messages.showInputDialog(
+            project,
+            BetterLogcatBundle.message("tags.group.prompt"),
+            BetterLogcatBundle.message("tags.group.title"),
+            null,
+            initial,
+            object : InputValidator {
+                override fun checkInput(inputString: String?): Boolean {
+                    val name = inputString.orEmpty().trim()
+                    return name.isNotEmpty() && name !in taken
+                }
+
+                override fun canClose(inputString: String?): Boolean = checkInput(inputString = inputString)
+            },
+        )?.trim()
     }
 
     override fun showGutterMenu(

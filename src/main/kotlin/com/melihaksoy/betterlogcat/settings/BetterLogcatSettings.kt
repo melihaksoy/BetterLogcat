@@ -57,6 +57,10 @@ class BetterLogcatSettings : SimplePersistentStateComponent<BetterLogcatSettings
         var lastFilter by string(defaultValue = null)
         var favoriteFilters by list<String>()
         var packageAliases by map<String, String>()
+        /** The user's own tag descriptions, by tag. They win over the built-in ones. */
+        var tagNotes by map<String, String>()
+        /** Tag groups the user made in the Tags panel, one `TagGroup.encode` line each. */
+        var tagGroups by list<String>()
         var levelColors by map<String, String>()
         var highlightRules by list<String>()
         var enabledPresets by list<String>()

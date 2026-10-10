@@ -33,6 +33,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.job
 import org.jetbrains.jewel.bridge.JewelComposePanel
 import javax.swing.JComponent
+import com.melihaksoy.betterlogcat.ide.TagNotesStore
 
 /** One log view: a ViewModel and its Compose panel. Disposing it stops its stream. */
 class LogcatPane(
@@ -60,6 +61,7 @@ class LogcatPane(
         aliasStore = PackageAliasStore.getInstance(),
         appearanceStore = AppearanceStore.getInstance(),
         bookmarkStore = BookmarkStore.getInstance(project = project),
+        tagNotesStore = TagNotesStore.getInstance(),
     )
 
     private val paneActions = actions(this)

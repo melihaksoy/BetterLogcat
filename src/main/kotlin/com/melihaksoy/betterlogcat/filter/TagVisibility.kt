@@ -51,12 +51,24 @@ object TagVisibility {
     fun showOnly(
         filter: LogFilter,
         tag: String,
-    ): LogFilter = filter.withRunningTerms(
-        terms = withoutTagTerms(filter = filter) + tagTerms(
-            shown = listOf(tag),
-            hidden = emptyList(),
-        ),
+    ): LogFilter = showOnly(
+        filter = filter,
+        tags = listOf(tag),
     )
+
+    /** Shows only [tags], for example the tags of one group. No tags changes nothing. */
+    fun showOnly(
+        filter: LogFilter,
+        tags: Collection<String>,
+    ): LogFilter {
+        if (tags.isEmpty()) return filter
+        return filter.withRunningTerms(
+            terms = withoutTagTerms(filter = filter) + tagTerms(
+                shown = tags.distinct(),
+                hidden = emptyList(),
+            ),
+        )
+    }
 
     fun showAll(filter: LogFilter): LogFilter = filter.withRunningTerms(terms = withoutTagTerms(filter = filter))
 
