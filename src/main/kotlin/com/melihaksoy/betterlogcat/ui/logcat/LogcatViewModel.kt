@@ -58,6 +58,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -147,8 +148,20 @@ class LogcatViewModel(
         appearanceStore.levelColors
             .onEach { colors -> _state.update { it.copy(levelColors = colors) } }
             .launchIn(scope = workScope)
-        appearanceStore.highlightRules
-            .onEach { rules -> _state.update { it.copy(highlightRules = rules) } }
+        combine(
+            flow = appearanceStore.highlightRules,
+            flow2 = appearanceStore.presets,
+            transform = ::Pair,
+        )
+            .onEach { (rules, presets) ->
+                _state.update {
+                    it.copy(
+                        highlightRules = presets.rules() + rules,
+                        ownHighlightRules = rules,
+                        presetHighlights = presets,
+                    )
+                }
+            }
             .launchIn(scope = workScope)
         bookmarkStore.bookmarks
             .onEach(::onBookmarksChanged)
@@ -208,6 +221,19 @@ class LogcatViewModel(
             )
             is LogcatIntent.AddHighlightRule -> appearanceStore.addRule(rule = intent.rule)
             is LogcatIntent.RemoveHighlightRule -> appearanceStore.removeRule(rule = intent.rule)
+            is LogcatIntent.SetPresetEnabled -> appearanceStore.setPresetEnabled(
+                preset = intent.preset,
+                isEnabled = intent.isEnabled,
+            )
+            is LogcatIntent.SetPresetRoleEnabled -> appearanceStore.setPresetRoleEnabled(
+                preset = intent.preset,
+                role = intent.role,
+                isEnabled = intent.isEnabled,
+            )
+            is LogcatIntent.SetHighlightRoleColor -> appearanceStore.setRoleColor(
+                role = intent.role,
+                colorArgb = intent.colorArgb,
+            )
             is LogcatIntent.SetPackageAlias -> aliasStore.set(
                 packageName = intent.packageName,
                 alias = intent.alias,

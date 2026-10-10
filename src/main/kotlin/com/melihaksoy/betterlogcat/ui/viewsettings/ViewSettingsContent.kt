@@ -20,10 +20,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
-import com.melihaksoy.betterlogcat.model.HighlightPreset
 import com.melihaksoy.betterlogcat.model.HighlightRule
 import com.melihaksoy.betterlogcat.model.LogColumn
 import com.melihaksoy.betterlogcat.model.LogLevel
+import com.melihaksoy.betterlogcat.model.PresetHighlights
 import com.melihaksoy.betterlogcat.model.TimeFormat
 import com.melihaksoy.betterlogcat.ui.logcat.LogcatIntent
 import com.melihaksoy.betterlogcat.ui.logcat.component.LogHeader
@@ -43,7 +43,6 @@ import org.jetbrains.jewel.ui.component.GroupHeader
 import org.jetbrains.jewel.ui.component.Link
 import org.jetbrains.jewel.ui.component.RadioButtonRow
 import org.jetbrains.jewel.ui.component.Text
-import java.awt.Point
 
 /**
  * The view settings window: two columns of options and a live preview, like Android Studio's
@@ -57,16 +56,16 @@ internal fun ViewSettingsContent(
     packageAliases: Map<String, String>,
     levelColors: Map<LogLevel, Long>,
     highlightRules: List<HighlightRule>,
+    presetHighlights: PresetHighlights,
     onIntent: (LogcatIntent) -> Unit,
     onOpenIdeSettings: () -> Unit,
     onEditAlias: (String) -> Unit,
     onAddAlias: () -> Unit,
     onPickColor: (initial: Long, onPicked: (Long) -> Unit) -> Unit,
-    onPickPreset: (at: Point, presets: List<HighlightPreset>, onPicked: (HighlightPreset) -> Unit) -> Unit,
 ) {
     val baseColors = rememberLogColors()
     val colors = remember(baseColors, levelColors) { baseColors.withLevelColors(overrides = levelColors) }
-    val keywords = remember(highlightRules) { KeywordHighlighter(rules = highlightRules) }
+    val keywords = remember(highlightRules, presetHighlights) { KeywordHighlighter(rules = presetHighlights.rules() + highlightRules) }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -104,10 +103,10 @@ internal fun ViewSettingsContent(
                 ColorsSection(
                     levelColors = levelColors,
                     highlightRules = highlightRules,
+                    presetHighlights = presetHighlights,
                     colors = colors,
                     onIntent = onIntent,
                     onPickColor = onPickColor,
-                    onPickPreset = onPickPreset,
                 )
             }
             Column(
@@ -503,12 +502,12 @@ private fun PreviewViewSettingsContent() {
             packageAliases = mapOf("com.vintagegarage.app.debug" to "VG debug"),
             levelColors = emptyMap(),
             highlightRules = emptyList(),
+            presetHighlights = PresetHighlights(),
             onIntent = {},
             onOpenIdeSettings = {},
             onEditAlias = {},
             onAddAlias = {},
             onPickColor = { _, _ -> },
-            onPickPreset = { _, _, _ -> },
         )
     }
 }
@@ -528,12 +527,12 @@ private fun PreviewViewSettingsContentCompact() {
             packageAliases = emptyMap(),
             levelColors = emptyMap(),
             highlightRules = emptyList(),
+            presetHighlights = PresetHighlights(),
             onIntent = {},
             onOpenIdeSettings = {},
             onEditAlias = {},
             onAddAlias = {},
             onPickColor = { _, _ -> },
-            onPickPreset = { _, _, _ -> },
         )
     }
 }

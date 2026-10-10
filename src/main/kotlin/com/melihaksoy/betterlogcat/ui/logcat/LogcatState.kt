@@ -6,6 +6,7 @@ import com.melihaksoy.betterlogcat.model.Device
 import com.melihaksoy.betterlogcat.model.HighlightRule
 import com.melihaksoy.betterlogcat.model.LogEntry
 import com.melihaksoy.betterlogcat.model.LogLevel
+import com.melihaksoy.betterlogcat.model.PresetHighlights
 import com.melihaksoy.betterlogcat.network.NetworkCall
 import com.melihaksoy.betterlogcat.ui.logcat.model.BookmarkUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.LogcatContentUiModel
@@ -34,7 +35,11 @@ data class LogcatState(
     val packageAliases: Map<String, String> = emptyMap(),
     /** User colors that replace the theme color of a level. */
     val levelColors: Map<LogLevel, Long> = emptyMap(),
+    /** What paints: enabled preset rules first, then the user's own, so the user's own paint last. */
     val highlightRules: List<HighlightRule> = emptyList(),
+    /** The user's own keywords, for the settings window. */
+    val ownHighlightRules: List<HighlightRule> = emptyList(),
+    val presetHighlights: PresetHighlights = PresetHighlights(),
     val tagCounts: Map<String, Int> = emptyMap(),
     /** Process ids seen per tag. */
     val tagPids: Map<String, Set<Int>> = emptyMap(),

@@ -59,6 +59,13 @@ class BetterLogcatSettings : SimplePersistentStateComponent<BetterLogcatSettings
         var packageAliases by map<String, String>()
         var levelColors by map<String, String>()
         var highlightRules by list<String>()
+        var enabledPresets by list<String>()
+
+        /** Role id to AARRGGBB hex. */
+        var presetRoleColors by map<String, String>()
+
+        /** `presetId/roleId` of roles turned off inside one preset. */
+        var disabledPresetRoles by list<String>()
         var filterHistory by list<String>()
 
         var mediaDirectory by string(defaultValue = "")

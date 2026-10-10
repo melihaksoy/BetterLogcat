@@ -2,31 +2,32 @@ package com.melihaksoy.betterlogcat.model
 
 import androidx.compose.runtime.Immutable
 
+/** One pattern of a preset. Its color comes from [role], never from the preset. Always a regex. */
+@Immutable
+data class PresetRule(
+    val role: HighlightRole,
+    val pattern: String,
+)
+
 /**
- * Ready-made keyword highlights for the log format of a common library. Adding one adds its [rules]
- * as normal keyword highlights, so each can be recolored or removed on its own. [nameKey] is a
- * message bundle key.
+ * Ready-made highlights for the log format of a common library. A preset stays linked: it is turned
+ * on or off as a whole, its roles can be turned off one by one, and role colors are shared with other
+ * presets (see [PresetHighlights]). Patterns follow the library's current format, so a library
+ * release that changes its format needs a plugin update. [id] is saved in settings; never change it.
+ * [nameKey] is a message bundle key.
  */
 @Immutable
 data class HighlightPreset(
+    val id: String,
     val nameKey: String,
-    val rules: List<HighlightRule>,
+    val rules: List<PresetRule>,
 ) {
-    /** True when every rule of the preset is in [current]. Matched by pattern, so recolored rules count. */
-    fun isAdded(current: List<HighlightRule>): Boolean {
-        val patterns = current.mapTo(destination = HashSet()) { it.pattern }
-        return rules.all { it.pattern in patterns }
-    }
+    /** The roles in rule order, each once. One settings row per role. */
+    val roles: List<HighlightRole> get() = rules.map { it.role }.distinct()
+
+    fun patterns(role: HighlightRole): List<String> = rules.filter { it.role == role }.map { it.pattern }
 
     companion object {
-        private const val GREEN = 0xFF2EB67D
-        private const val BLUE = 0xFF61AFEF
-        private const val ORANGE = 0xFFF39C12
-        private const val RED = 0xFFE06C75
-        private const val CYAN = 0xFF56B6C2
-        private const val PURPLE = 0xFFC678DD
-        private const val INDIGO = 0xFF7C83FD
-
         // The status code plus its reason phrase when there is one ("200 OK", "404 Not Found").
         private const val REASON = "(?: [A-Z][A-Za-z ]*[A-Za-z])?"
 
@@ -35,49 +36,43 @@ data class HighlightPreset(
          * `-> name: value` lines and `BODY START` ... `BODY END`.
          */
         val Ktor = HighlightPreset(
+            id = "ktor",
             nameKey = "colors.presets.ktor",
             rules = listOf(
-                regex(
+                PresetRule(
+                    role = HighlightRole.HTTP_SECTION,
                     pattern = "(?m)^(?:REQUEST|RESPONSE|METHOD|FROM|BODY Content-Type)(?=:)|^(?:COMMON HEADERS|CONTENT HEADERS|BODY START|BODY END)$",
-                    colorArgb = PURPLE,
                 ),
-                regex(
+                PresetRule(
+                    role = HighlightRole.HTTP_INFO,
                     pattern = "(?m)(?<=^RESPONSE: )[13]\\d\\d$REASON",
-                    colorArgb = BLUE,
                 ),
-                regex(
+                PresetRule(
+                    role = HighlightRole.HTTP_SUCCESS,
                     pattern = "(?m)(?<=^RESPONSE: )2\\d\\d$REASON",
-                    colorArgb = GREEN,
                 ),
-                regex(
+                PresetRule(
+                    role = HighlightRole.HTTP_CLIENT_ERROR,
                     pattern = "(?m)(?<=^RESPONSE: )4\\d\\d$REASON",
-                    colorArgb = ORANGE,
                 ),
-                regex(
+                PresetRule(
+                    role = HighlightRole.HTTP_SERVER_ERROR,
                     pattern = "(?m)(?<=^RESPONSE: )5\\d\\d$REASON",
-                    colorArgb = RED,
                 ),
                 // `GET`, and also the `HttpMethod(value=GET)` form.
-                regex(
+                PresetRule(
+                    role = HighlightRole.HTTP_METHOD,
                     pattern = "(?m)(?<=^METHOD: )(?:HttpMethod\\(value=[A-Z]+\\)|[A-Z]+)",
-                    colorArgb = CYAN,
                 ),
-                regex(
+                PresetRule(
+                    role = HighlightRole.HTTP_HEADER,
                     pattern = "(?m)(?<=^-> )[A-Za-z0-9-]+(?=:)",
-                    colorArgb = INDIGO,
                 ),
             ),
         )
 
         val all: List<HighlightPreset> = listOf(Ktor)
 
-        private fun regex(
-            pattern: String,
-            colorArgb: Long,
-        ) = HighlightRule(
-            pattern = pattern,
-            colorArgb = colorArgb,
-            isRegex = true,
-        )
+        fun fromId(id: String): HighlightPreset? = all.firstOrNull { it.id == id }
     }
 }

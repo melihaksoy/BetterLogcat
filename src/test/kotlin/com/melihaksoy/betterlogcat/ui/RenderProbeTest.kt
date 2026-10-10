@@ -93,12 +93,12 @@ class RenderProbeTest : BasePlatformTestCase() {
                 packageAliases = mapOf("com.vintagegarage.app.debug" to "VG debug"),
                 levelColors = mapOf(com.melihaksoy.betterlogcat.model.LogLevel.DEBUG to 0xFF2EB67D),
                 highlightRules = listOf(com.melihaksoy.betterlogcat.model.HighlightRule(pattern = "412 ms", colorArgb = 0xFFE06C75, isRegex = false)),
+                presetHighlights = com.melihaksoy.betterlogcat.model.PresetHighlights(enabledIds = setOf("ktor")),
                 onIntent = {},
                 onOpenIdeSettings = {},
                 onEditAlias = {},
                 onAddAlias = {},
                 onPickColor = { _, _ -> },
-                onPickPreset = { _, _, _ -> },
             )
         }
     }

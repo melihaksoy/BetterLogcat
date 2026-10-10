@@ -5,6 +5,8 @@ import com.melihaksoy.betterlogcat.filter.PackageFilter
 import com.melihaksoy.betterlogcat.filter.QueryTerm
 import com.melihaksoy.betterlogcat.format.CopyMode
 import com.melihaksoy.betterlogcat.format.StackFrame
+import com.melihaksoy.betterlogcat.model.HighlightPreset
+import com.melihaksoy.betterlogcat.model.HighlightRole
 import com.melihaksoy.betterlogcat.model.HighlightRule
 import com.melihaksoy.betterlogcat.model.LogColumn
 import com.melihaksoy.betterlogcat.model.LogLevel
@@ -42,6 +44,21 @@ sealed interface LogcatIntent {
     ) : LogcatIntent
     data class AddHighlightRule(val rule: HighlightRule) : LogcatIntent
     data class RemoveHighlightRule(val rule: HighlightRule) : LogcatIntent
+    data class SetPresetEnabled(
+        val preset: HighlightPreset,
+        val isEnabled: Boolean,
+    ) : LogcatIntent
+    data class SetPresetRoleEnabled(
+        val preset: HighlightPreset,
+        val role: HighlightRole,
+        val isEnabled: Boolean,
+    ) : LogcatIntent
+
+    /** A null [colorArgb] goes back to the role's default. */
+    data class SetHighlightRoleColor(
+        val role: HighlightRole,
+        val colorArgb: Long?,
+    ) : LogcatIntent
     data class SetPackageAlias(
         val packageName: String,
         val alias: String,
