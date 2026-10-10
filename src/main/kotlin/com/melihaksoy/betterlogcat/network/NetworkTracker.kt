@@ -5,7 +5,8 @@ import com.melihaksoy.betterlogcat.model.LogEntry
 /**
  * Pairs HTTP requests with their responses as entries arrive. Knows two common loggers:
  * - Ktor `Logging`: `REQUEST: <url>` + `METHOD: GET`, then `RESPONSE: 200` + `METHOD:` + `FROM: <url>`.
- * - OkHttp `HttpLoggingInterceptor`: `--> GET <url>`, then `<-- 200 OK <url> (123ms)`.
+ * - OkHttp `HttpLoggingInterceptor`: `--> GET <url>`, then `<-- 200 OK <url> (123ms)` or
+ *   `<-- HTTP FAILED: <exception>. <url> (123ms)`. A failed call keeps status 0.
  * A response pairs with the oldest open request of the same method and address. Not thread safe.
  */
 class NetworkTracker {
@@ -35,6 +36,16 @@ class NetworkTracker {
                     entry = entry,
                     method = match.groupValues[1],
                     url = match.groupValues[2],
+                )
+            }
+            message.startsWith(OKHTTP_FAILED) -> {
+                val match = okHttpFailed.find(input = message) ?: return false
+                addResponse(
+                    entry = entry,
+                    method = "",
+                    url = match.groupValues[1],
+                    status = 0,
+                    durationMillis = match.groupValues[2].toLong(),
                 )
             }
             message.startsWith(OKHTTP_RESPONSE) -> {
@@ -132,7 +143,13 @@ class NetworkTracker {
         const val KTOR_RESPONSE = "RESPONSE:"
         const val OKHTTP_REQUEST = "--> "
         const val OKHTTP_RESPONSE = "<-- "
-        val okHttpRequest = Regex(pattern = """^--> ([A-Z]+) (\S+)""")
+        const val OKHTTP_FAILED = "<-- HTTP FAILED: "
+
+        // `--> END GET` closes the request headers; it is not a new call.
+        val okHttpRequest = Regex(pattern = """^--> (?!END )([A-Z]+) (\S+)""")
         val okHttpResponse = Regex(pattern = """^<-- (\d{3})(?: .*?)? (https?://\S+)(?: \((\d+)ms)?""")
+
+        // OkHttp 4 leaves out the address and the duration, so such a line cannot pair with its request.
+        val okHttpFailed = Regex(pattern = """^<-- HTTP FAILED: .*\. (https?://\S+) \((\d+)ms\)$""", option = RegexOption.MULTILINE)
     }
 }

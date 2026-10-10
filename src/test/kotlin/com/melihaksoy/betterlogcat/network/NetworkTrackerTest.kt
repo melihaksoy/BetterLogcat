@@ -37,6 +37,32 @@ class NetworkTrackerTest {
     }
 
     @Test
+    fun `okhttp end lines add no call`() {
+        val tracker = NetworkTracker()
+        tracker.onEntry(entry = entry(id = 1, millis = 0, message = "--> GET https://api.example.com/v1/items"))
+        tracker.onEntry(entry = entry(id = 2, millis = 1, message = "--> END GET"))
+        tracker.onEntry(entry = entry(id = 3, millis = 90, message = "<-- 200 https://api.example.com/v1/items (88ms)"))
+        tracker.onEntry(entry = entry(id = 4, millis = 91, message = "<-- END HTTP (90ms, 512-byte body)"))
+
+        val call = tracker.snapshot().single()
+        assertEquals("GET", call.method)
+        assertEquals(200, call.statusCode)
+    }
+
+    @Test
+    fun `okhttp failure closes the request`() {
+        val tracker = NetworkTracker()
+        tracker.onEntry(entry = entry(id = 1, millis = 0, message = "--> GET https://api.example.com/v1/items"))
+        tracker.onEntry(entry = entry(id = 2, millis = 10_000, message = "<-- HTTP FAILED: java.net.SocketTimeoutException: timeout. https://api.example.com/v1/items (10002ms)"))
+
+        val call = tracker.snapshot().single()
+        assertEquals(false, call.isPending)
+        assertEquals(0, call.statusCode)
+        assertEquals(10_002, call.durationMillis)
+        assertEquals(2, call.responseEntryId)
+    }
+
+    @Test
     fun `an open request stays pending`() {
         val tracker = NetworkTracker()
         tracker.onEntry(entry = entry(id = 1, millis = 0, message = "--> GET https://api.example.com/slow"))

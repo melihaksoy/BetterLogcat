@@ -4,7 +4,8 @@ import androidx.compose.runtime.Immutable
 
 /**
  * One HTTP call found in the logs. [statusCode] and [responseEntryId] stay 0 / [NO_ENTRY] while the
- * response has not arrived. [durationMillis] is -1 when unknown.
+ * response has not arrived. A failed call has a response entry and [statusCode] 0. [durationMillis] is
+ * -1 when unknown.
  */
 @Immutable
 data class NetworkCall(
