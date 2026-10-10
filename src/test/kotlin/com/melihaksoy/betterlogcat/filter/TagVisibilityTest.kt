@@ -126,4 +126,18 @@ class TagVisibilityTest {
         filter = this,
         processNames = emptyMap(),
     ).isTagVisible(tag = tag)
+
+    @Test
+    fun `show only a group writes one show term with all its tags`() {
+        val filter = TagVisibility.showOnly(
+            filter = LogFilter().withQueryString(text = "package:mine -tag=:art"),
+            tags = listOf("SnowplowTracker", "SnowplowEmitter", "SnowplowTracker"),
+        )
+
+        assertTrue(filter.isTagVisible(tag = "SnowplowTracker"))
+        assertTrue(filter.isTagVisible(tag = "SnowplowEmitter"))
+        assertFalse(filter.isTagVisible(tag = "art"))
+        assertFalse(filter.isTagVisible(tag = "OkHttp"))
+        assertEquals(filter, TagVisibility.showOnly(filter = filter, tags = emptyList()))
+    }
 }

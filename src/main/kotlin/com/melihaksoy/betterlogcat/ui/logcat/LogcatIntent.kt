@@ -54,12 +54,29 @@ sealed interface LogcatIntent {
     data class ToggleLevel(val level: LogLevel) : LogcatIntent
     data class SelectPackage(val packageFilter: PackageFilter) : LogcatIntent
     data class ShowOnlyTag(val tag: String) : LogcatIntent
+    data class ShowOnlyTags(val tags: List<String>) : LogcatIntent
     data class HideTag(val tag: String) : LogcatIntent
     data class SetTagsVisible(
         val tags: List<String>,
         val isVisible: Boolean,
     ) : LogcatIntent
     data object ShowAllTags : LogcatIntent
+
+    /** A blank [note] removes the user's note, so the built-in description shows again. */
+    data class SetTagNote(
+        val tag: String,
+        val note: String,
+    ) : LogcatIntent
+    data class AddTagToGroup(
+        val tag: String,
+        val groupName: String,
+    ) : LogcatIntent
+    data class RemoveTagFromGroup(val tag: String) : LogcatIntent
+    data class RenameTagGroup(
+        val from: String,
+        val to: String,
+    ) : LogcatIntent
+    data class DeleteTagGroup(val name: String) : LogcatIntent
     data class ToggleSidePanel(val panel: SidePanel) : LogcatIntent
     data class ResizeSidePanel(
         val panel: SidePanel,

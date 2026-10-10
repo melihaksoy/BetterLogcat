@@ -50,10 +50,20 @@ import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.TextField
 import org.jetbrains.jewel.ui.component.VerticalScrollbar
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.unit.Dp
+import com.melihaksoy.betterlogcat.model.TagDescriptions
+import com.melihaksoy.betterlogcat.model.TagGroup
+import org.jetbrains.jewel.ui.component.Tooltip
+import org.jetbrains.jewel.ui.component.TriStateCheckbox
+import java.awt.Point
 
 /**
  * Side panel to show or hide tags one by one. Rows sort by entry count, busiest first.
- * "Show all" and "Hide all" act on the rows the search leaves.
+ * "Show all" and "Hide all" act on the rows the search leaves. The user's tag groups come first, as
+ * folders; a tag shows a description on hover when there is one. Right-click opens the tag menu.
  */
 @Composable
 internal fun TagsPanel(
@@ -63,6 +73,10 @@ internal fun TagsPanel(
     appTags: Set<String>,
     filter: LogFilter,
     colors: LogColors,
+    tagNotes: Map<String, String> = emptyMap(),
+    tagGroups: List<TagGroup> = emptyList(),
+    onTagMenu: (String, Point) -> Unit = { _, _ -> },
+    onGroupMenu: (String, Point) -> Unit = { _, _ -> },
     onIntent: (LogcatIntent) -> Unit,
 ) {
     val searchState = rememberTextFieldState()
@@ -80,6 +94,8 @@ internal fun TagsPanel(
         )
     }
     val hiddenCount = tagCounts.keys.count { !tagMatcher.isTagVisible(tag = it) }
+    // Folded by default: a group is there to put noise away. A search opens groups with matches.
+    var expandedGroups by remember { mutableStateOf(value = emptySet<String>()) }
 
     Column(modifier = modifier.background(color = JewelTheme.globalColors.panelBackground)) {
         Row(
@@ -164,7 +180,12 @@ internal fun TagsPanel(
                 )
             }
         }
-        if (rows.isEmpty()) {
+        val groupedTags = remember(tagGroups) { tagGroups.flatMapTo(destination = HashSet()) { it.tags } }
+        val rowTags = remember(rows) { rows.mapTo(destination = HashSet()) { it.first } }
+        val matchingGroups = tagGroups.filter { group ->
+            query.isEmpty() || group.name.contains(other = query, ignoreCase = true) || group.tags.any { it in rowTags }
+        }
+        if (rows.isEmpty() && matchingGroups.isEmpty()) {
             Text(
                 text = BetterLogcatBundle.message(if (tagCounts.isEmpty()) "tags.empty" else "tags.noMatch"),
                 modifier = Modifier.padding(all = 10.dp),
@@ -177,21 +198,87 @@ internal fun TagsPanel(
                     modifier = Modifier.fillMaxSize(),
                     state = listState,
                 ) {
+                    matchingGroups.forEach { tagGroup ->
+                        // Present tags only, busiest first; all of them when the search matches the group name.
+                        val isNameMatch = query.isNotEmpty() && tagGroup.name.contains(other = query, ignoreCase = true)
+                        val groupRows = tagCounts.entries
+                            .filter { it.key in tagGroup.tags && (query.isEmpty() || isNameMatch || it.key.contains(other = query, ignoreCase = true)) }
+                            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key.lowercase() })
+                            .map { it.key to it.value }
+                        val isExpanded = tagGroup.name in expandedGroups || (query.isNotEmpty() && groupRows.isNotEmpty())
+                        val visibleCount = tagGroup.tags.count { tagMatcher.isTagVisible(tag = it) }
+                        item(key = GROUP_KEY_PREFIX + tagGroup.name) {
+                            TagGroupRow(
+                                name = tagGroup.name,
+                                count = groupRows.sumOf { it.second },
+                                visibility = when (visibleCount) {
+                                    tagGroup.tags.size -> ToggleableState.On
+                                    0 -> ToggleableState.Off
+                                    else -> ToggleableState.Indeterminate
+                                },
+                                isExpanded = isExpanded,
+                                colors = colors,
+                                onToggleExpanded = {
+                                    expandedGroups = if (tagGroup.name in expandedGroups) expandedGroups - tagGroup.name else expandedGroups + tagGroup.name
+                                },
+                                onVisibleChange = { isVisible ->
+                                    onIntent(
+                                        LogcatIntent.SetTagsVisible(
+                                            tags = tagGroup.tags,
+                                            isVisible = isVisible,
+                                        ),
+                                    )
+                                },
+                                onShowOnly = { onIntent(LogcatIntent.ShowOnlyTags(tags = tagGroup.tags)) },
+                                onMenu = { point -> onGroupMenu(tagGroup.name, point) },
+                            )
+                        }
+                        if (isExpanded) {
+                            items(
+                                items = groupRows,
+                                key = { it.first },
+                            ) { (tag, count) ->
+                                TagRow(
+                                    tag = tag,
+                                    count = count,
+                                    rates = tagRates[tag],
+                                    description = TagDescriptions.describe(
+                                        tag = tag,
+                                        userNotes = tagNotes,
+                                    ),
+                                    isVisible = tagMatcher.isTagVisible(tag = tag),
+                                    indent = GROUP_INDENT,
+                                    colors = colors,
+                                    onVisibleChange = { isVisible ->
+                                        onIntent(
+                                            LogcatIntent.SetTagsVisible(
+                                                tags = listOf(tag),
+                                                isVisible = isVisible,
+                                            ),
+                                        )
+                                    },
+                                    onShowOnly = { onIntent(LogcatIntent.ShowOnlyTag(tag = tag)) },
+                                    onMenu = { point -> onTagMenu(tag, point) },
+                                )
+                            }
+                        }
+                    }
+                    val ungroupedRows = rows.filter { it.first !in groupedTags }
                     // With known project apps, tags split into "Your app" and "Other" (system and other apps).
                     val groups = if (appTags.isEmpty()) {
-                        listOf(TagGroup.ALL to rows)
+                        listOf(TagSection.ALL to ungroupedRows)
                     } else {
                         listOf(
-                            TagGroup.APP to rows.filter { it.first in appTags },
-                            TagGroup.OTHER to rows.filter { it.first !in appTags },
+                            TagSection.APP to ungroupedRows.filter { it.first in appTags },
+                            TagSection.OTHER to ungroupedRows.filter { it.first !in appTags },
                         ).filter { it.second.isNotEmpty() }
                     }
                     groups.forEach { (group, groupRows) ->
-                        if (group != TagGroup.ALL) {
+                        if (group != TagSection.ALL) {
                             item(key = "header-${group.name}") {
                                 GroupHeaderRow(
                                     title = BetterLogcatBundle.message(
-                                        if (group == TagGroup.APP) "tags.group.app" else "tags.group.other",
+                                        if (group == TagSection.APP) "tags.group.app" else "tags.group.other",
                                         groupRows.size,
                                     ),
                                     colors = colors,
@@ -222,6 +309,10 @@ internal fun TagsPanel(
                                 tag = tag,
                                 count = count,
                                 rates = tagRates[tag],
+                                description = TagDescriptions.describe(
+                                    tag = tag,
+                                    userNotes = tagNotes,
+                                ),
                                 isVisible = tagMatcher.isTagVisible(tag = tag),
                                 colors = colors,
                                 onVisibleChange = { isVisible ->
@@ -233,6 +324,7 @@ internal fun TagsPanel(
                                     )
                                 },
                                 onShowOnly = { onIntent(LogcatIntent.ShowOnlyTag(tag = tag)) },
+                                onMenu = { point -> onTagMenu(tag, point) },
                             )
                         }
                     }
@@ -248,10 +340,81 @@ internal fun TagsPanel(
     }
 }
 
-private enum class TagGroup {
+private enum class TagSection {
     ALL,
     APP,
     OTHER,
+}
+
+// Group rows and tag rows share one list; tags never start with this.
+private const val GROUP_KEY_PREFIX = "\u0000group:"
+private val GROUP_INDENT = 18.dp
+
+/** A user tag group: fold, show or hide all its tags at once. Right-click to rename or delete it. */
+@Composable
+private fun TagGroupRow(
+    name: String,
+    count: Int,
+    visibility: ToggleableState,
+    isExpanded: Boolean,
+    colors: LogColors,
+    onToggleExpanded: () -> Unit,
+    onVisibleChange: (Boolean) -> Unit,
+    onShowOnly: () -> Unit,
+    onMenu: (Point) -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(24.dp)
+            .then(rememberContextClickModifier(onClick = onMenu))
+            .hoverable(interactionSource = interactionSource)
+            .background(color = if (isHovered) colors.hover else Color.Transparent)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onToggleExpanded,
+            )
+            .padding(
+                start = 2.dp,
+                end = 14.dp,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(space = 4.dp),
+    ) {
+        Icon(
+            key = if (isExpanded) AllIconsKeys.General.ChevronDown else AllIconsKeys.General.ChevronRight,
+            contentDescription = BetterLogcatBundle.message(if (isExpanded) "tags.group.collapse" else "tags.group.expand"),
+        )
+        TriStateCheckbox(
+            state = visibility,
+            onClick = { onVisibleChange(visibility != ToggleableState.On) },
+        )
+        Icon(
+            key = AllIconsKeys.Nodes.Folder,
+            contentDescription = null,
+        )
+        Text(
+            text = name,
+            modifier = Modifier.weight(1f),
+            fontWeight = FontWeight.SemiBold,
+            color = if (visibility == ToggleableState.Off) colors.muted else JewelTheme.globalColors.text.normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (isHovered) {
+            Link(
+                text = BetterLogcatBundle.message("tags.only"),
+                onClick = onShowOnly,
+            )
+        }
+        Text(
+            text = count.toString(),
+            color = colors.muted,
+        )
+    }
 }
 
 @Composable
@@ -294,10 +457,13 @@ private fun TagRow(
     tag: String,
     count: Int,
     rates: IntArray?,
+    description: String?,
     isVisible: Boolean,
     colors: LogColors,
+    indent: Dp = 0.dp,
     onVisibleChange: (Boolean) -> Unit,
     onShowOnly: () -> Unit,
+    onMenu: (Point) -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
@@ -305,6 +471,7 @@ private fun TagRow(
         modifier = modifier
             .fillMaxWidth()
             .height(24.dp)
+            .then(rememberContextClickModifier(onClick = onMenu))
             .hoverable(interactionSource = interactionSource)
             .background(color = if (isHovered) colors.hover else Color.Transparent)
             .clickable(
@@ -313,7 +480,7 @@ private fun TagRow(
                 onClick = { onVisibleChange(!isVisible) },
             )
             .padding(
-                start = 8.dp,
+                start = 8.dp + indent,
                 end = 14.dp,
             ),
         verticalAlignment = Alignment.CenterVertically,
@@ -323,12 +490,11 @@ private fun TagRow(
             checked = isVisible,
             onCheckedChange = onVisibleChange,
         )
-        Text(
-            text = tag,
+        TagName(
             modifier = Modifier.weight(1f),
+            tag = tag,
+            description = description,
             color = if (isVisible) colors.tag(tag = tag) else colors.muted,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
         )
         if (isHovered) {
             Link(
@@ -346,6 +512,37 @@ private fun TagRow(
             text = count.toString(),
             color = colors.muted,
         )
+    }
+}
+
+/** The tag, with its description as a tooltip when it has one. */
+@Composable
+private fun TagName(
+    modifier: Modifier = Modifier,
+    tag: String,
+    description: String?,
+    color: Color,
+) {
+    if (description == null) {
+        Text(
+            text = tag,
+            modifier = modifier,
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    } else {
+        Tooltip(
+            tooltip = { Text(text = description) },
+            modifier = modifier,
+        ) {
+            Text(
+                text = tag,
+                color = color,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -387,6 +584,12 @@ private fun PreviewTagsPanel() {
             appTags = setOf("OkHttp", "GarageApp", "AndroidRuntime"),
             filter = LogFilter(query = "package:mine -tag=:art,adbd "),
             colors = rememberLogColors(),
+            tagGroups = listOf(
+                TagGroup(
+                    name = "System noise",
+                    tags = listOf("art", "adbd"),
+                ),
+            ),
             onIntent = {},
         )
     }

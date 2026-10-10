@@ -76,6 +76,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import com.melihaksoy.betterlogcat.ide.TagNotesStore
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class LogcatViewModel(
@@ -93,6 +94,7 @@ class LogcatViewModel(
     private val aliasStore: PackageAliasStore,
     private val appearanceStore: AppearanceStore,
     private val bookmarkStore: BookmarkStore,
+    private val tagNotesStore: TagNotesStore,
 ) {
     private val _state = MutableStateFlow(value = initialState())
     val state: StateFlow<LogcatState> = _state.asStateFlow()
@@ -143,6 +145,12 @@ class LogcatViewModel(
             .launchIn(scope = workScope)
         aliasStore.aliases
             .onEach { aliases -> _state.update { it.copy(packageAliases = aliases) } }
+            .launchIn(scope = workScope)
+        tagNotesStore.notes
+            .onEach { notes -> _state.update { it.copy(tagNotes = notes) } }
+            .launchIn(scope = workScope)
+        tagNotesStore.groups
+            .onEach { groups -> _state.update { it.copy(tagGroups = groups) } }
             .launchIn(scope = workScope)
         appearanceStore.levelColors
             .onEach { colors -> _state.update { it.copy(levelColors = colors) } }
@@ -220,6 +228,26 @@ class LogcatViewModel(
             is LogcatIntent.ToggleLevel -> toggleLevel(level = intent.level)
             is LogcatIntent.SelectPackage -> updateFilter { it.withPackageFilter(packageFilter = intent.packageFilter) }
             is LogcatIntent.ShowOnlyTag -> showOnlyTag(tag = intent.tag)
+            is LogcatIntent.ShowOnlyTags -> updateFilter {
+                TagVisibility.showOnly(
+                    filter = it,
+                    tags = intent.tags,
+                )
+            }
+            is LogcatIntent.SetTagNote -> tagNotesStore.setNote(
+                tag = intent.tag,
+                note = intent.note,
+            )
+            is LogcatIntent.AddTagToGroup -> tagNotesStore.addToGroup(
+                tag = intent.tag,
+                groupName = intent.groupName,
+            )
+            is LogcatIntent.RemoveTagFromGroup -> tagNotesStore.removeFromGroup(tag = intent.tag)
+            is LogcatIntent.RenameTagGroup -> tagNotesStore.renameGroup(
+                from = intent.from,
+                to = intent.to,
+            )
+            is LogcatIntent.DeleteTagGroup -> tagNotesStore.deleteGroup(name = intent.name)
             is LogcatIntent.HideTag -> hideTag(tag = intent.tag)
             is LogcatIntent.SetTagsVisible -> setTagsVisible(
                 tags = intent.tags,

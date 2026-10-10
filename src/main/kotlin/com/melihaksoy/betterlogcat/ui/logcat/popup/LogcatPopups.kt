@@ -26,6 +26,18 @@ interface LogcatPopups {
     fun takeScreenshot()
     fun recordScreen()
 
+    /** Right-click on a tag in the Tags panel: description and group actions. */
+    fun showTagMenu(
+        tag: String,
+        at: Point,
+    )
+
+    /** Right-click on a tag group in the Tags panel. */
+    fun showTagGroupMenu(
+        groupName: String,
+        at: Point,
+    )
+
     object None : LogcatPopups {
         override fun showDevicePicker(at: Point) = Unit
         override fun showPackagePicker(at: Point) = Unit
@@ -43,5 +55,13 @@ interface LogcatPopups {
         ) = Unit
         override fun takeScreenshot() = Unit
         override fun recordScreen() = Unit
+        override fun showTagMenu(
+            tag: String,
+            at: Point,
+        ) = Unit
+        override fun showTagGroupMenu(
+            groupName: String,
+            at: Point,
+        ) = Unit
     }
 }

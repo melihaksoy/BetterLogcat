@@ -12,6 +12,7 @@ import com.melihaksoy.betterlogcat.domain.usecase.ProcessSnapshot
 import com.melihaksoy.betterlogcat.domain.usecase.StreamLogcatInteractor
 import com.melihaksoy.betterlogcat.ide.AppearanceStore
 import com.melihaksoy.betterlogcat.ide.BookmarkStore
+import com.melihaksoy.betterlogcat.ide.TagNotesStore
 import com.melihaksoy.betterlogcat.ide.PackageAliasStore
 import com.melihaksoy.betterlogcat.ide.SourceNavigator
 import com.melihaksoy.betterlogcat.model.Device
@@ -85,6 +86,7 @@ class LogcatViewModelTest : BasePlatformTestCase() {
             aliasStore = PackageAliasStore.getInstance(),
             appearanceStore = AppearanceStore.getInstance(),
             bookmarkStore = BookmarkStore.getInstance(project = project),
+            tagNotesStore = TagNotesStore.getInstance(),
         )
     }
 
