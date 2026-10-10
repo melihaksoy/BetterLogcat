@@ -44,6 +44,11 @@ enum class HighlightRole(
         labelKey = "colors.role.http.serverError",
         defaultArgb = 0xFFE06C75,
     ),
+    HTTP_FAILED(
+        id = "http.failed",
+        labelKey = "colors.role.http.failed",
+        defaultArgb = 0xFFE06C75,
+    ),
     ;
 
     companion object {

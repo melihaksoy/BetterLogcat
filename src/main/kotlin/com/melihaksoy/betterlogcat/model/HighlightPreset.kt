@@ -71,7 +71,54 @@ data class HighlightPreset(
             ),
         )
 
-        val all: List<HighlightPreset> = listOf(Ktor)
+        // OkHttp: the status code plus the reason phrase, up to the address ("200 OK", or "200" on HTTP/2).
+        private const val OKHTTP_REASON = "(?: [^\\n]*?)?(?= https?://)"
+
+        /**
+         * OkHttp `HttpLoggingInterceptor`, so also Retrofit: `--> GET <url>`, `--> END GET`,
+         * `<-- 200 OK <url> (123ms)`, `<-- END HTTP` and `<-- HTTP FAILED: <exception>`. Header lines have
+         * no prefix, so header names stay plain. `LoggingEventListener` lines: `[87 ms] callEnd`.
+         */
+        val OkHttp = HighlightPreset(
+            id = "okhttp",
+            nameKey = "colors.presets.okhttp",
+            rules = listOf(
+                PresetRule(
+                    role = HighlightRole.HTTP_SECTION,
+                    pattern = "(?m)^(?:-->|<--)(?: END(?: HTTP)?)?(?= |$)",
+                ),
+                PresetRule(
+                    role = HighlightRole.HTTP_SECTION,
+                    pattern = "(?m)(?<=^\\[\\d{1,9} ms\\] )[a-z][A-Za-z]*(?<!Failed)(?=:|$)",
+                ),
+                PresetRule(
+                    role = HighlightRole.HTTP_INFO,
+                    pattern = "(?m)(?<=^<-- )[13]\\d\\d$OKHTTP_REASON",
+                ),
+                PresetRule(
+                    role = HighlightRole.HTTP_SUCCESS,
+                    pattern = "(?m)(?<=^<-- )2\\d\\d$OKHTTP_REASON",
+                ),
+                PresetRule(
+                    role = HighlightRole.HTTP_CLIENT_ERROR,
+                    pattern = "(?m)(?<=^<-- )4\\d\\d$OKHTTP_REASON",
+                ),
+                PresetRule(
+                    role = HighlightRole.HTTP_SERVER_ERROR,
+                    pattern = "(?m)(?<=^<-- )5\\d\\d$OKHTTP_REASON",
+                ),
+                PresetRule(
+                    role = HighlightRole.HTTP_FAILED,
+                    pattern = "(?m)(?<=^<-- )HTTP FAILED(?=: )|(?<=^\\[\\d{1,9} ms\\] )[a-z][A-Za-z]*Failed(?=:|$)",
+                ),
+                PresetRule(
+                    role = HighlightRole.HTTP_METHOD,
+                    pattern = "(?m)(?<=^--> )(?!END )[A-Z]+(?= )|(?<=^--> END )[A-Z]+",
+                ),
+            ),
+        )
+
+        val all: List<HighlightPreset> = listOf(Ktor, OkHttp)
 
         fun fromId(id: String): HighlightPreset? = all.firstOrNull { it.id == id }
     }

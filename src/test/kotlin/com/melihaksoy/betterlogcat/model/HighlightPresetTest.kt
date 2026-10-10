@@ -28,10 +28,20 @@ class HighlightPresetTest {
         -> Content-Length: 12
     """.trimIndent()
 
+    private val okHttp = """
+        --> POST https://api.example.com/v1/login
+        Content-Type: application/json; charset=utf-8
+        Authorization: ██
+        --> END POST (12-byte body)
+        <-- 200 OK https://api.example.com/v1/login (143ms)
+        <-- END HTTP (150ms, 512-byte body)
+    """.trimIndent()
+
     private fun matches(
         role: HighlightRole,
         text: String,
-    ): List<String> = HighlightPreset.Ktor.patterns(role = role)
+        preset: HighlightPreset = HighlightPreset.Ktor,
+    ): List<String> = preset.patterns(role = role)
         .flatMap { pattern -> Regex(pattern = pattern).findAll(input = text).map { it.value }.toList() }
 
     @Test
@@ -67,6 +77,46 @@ class HighlightPresetTest {
     fun `json body and plain logs stay plain`() {
         val plain = "Basket loaded, status 200, METHOD: GET inside a sentence"
         HighlightPreset.Ktor.rules.forEach { rule ->
+            assertFalse(rule.pattern, Regex(pattern = rule.pattern).containsMatchIn(input = plain))
+            assertFalse(rule.pattern, Regex(pattern = rule.pattern).containsMatchIn(input = "{\"data\":[{\"id\":\"C1871320\",\"status\":\"ok\"}]}"))
+        }
+    }
+
+    @Test
+    fun `okhttp markers, method and status`() {
+        assertEquals(listOf("-->", "--> END", "<--", "<-- END HTTP"), matches(role = HighlightRole.HTTP_SECTION, text = okHttp, preset = HighlightPreset.OkHttp))
+        assertEquals(listOf("POST", "POST"), matches(role = HighlightRole.HTTP_METHOD, text = okHttp, preset = HighlightPreset.OkHttp))
+        assertEquals(listOf("200 OK"), matches(role = HighlightRole.HTTP_SUCCESS, text = okHttp, preset = HighlightPreset.OkHttp))
+    }
+
+    @Test
+    fun `okhttp status with and without reason phrase`() {
+        assertEquals(listOf("200"), matches(role = HighlightRole.HTTP_SUCCESS, text = "<-- 200 https://x.io/a (12ms)", preset = HighlightPreset.OkHttp))
+        assertEquals(listOf("404 Not Found"), matches(role = HighlightRole.HTTP_CLIENT_ERROR, text = "<-- 404 Not Found https://x.io/a (12ms)", preset = HighlightPreset.OkHttp))
+        assertEquals(listOf("503"), matches(role = HighlightRole.HTTP_SERVER_ERROR, text = "<-- 503 http://x.io/a (12ms)", preset = HighlightPreset.OkHttp))
+        assertEquals(listOf("301 Moved Permanently"), matches(role = HighlightRole.HTTP_INFO, text = "<-- 301 Moved Permanently https://x.io/a (12ms)", preset = HighlightPreset.OkHttp))
+    }
+
+    @Test
+    fun `okhttp failures`() {
+        assertEquals(
+            listOf("HTTP FAILED"),
+            matches(role = HighlightRole.HTTP_FAILED, text = "<-- HTTP FAILED: java.net.SocketTimeoutException: timeout. https://x.io/a (10002ms)", preset = HighlightPreset.OkHttp),
+        )
+        assertEquals(listOf("callFailed"), matches(role = HighlightRole.HTTP_FAILED, text = "[10002 ms] callFailed: java.io.IOException", preset = HighlightPreset.OkHttp))
+    }
+
+    @Test
+    fun `okhttp event listener names`() {
+        assertEquals(listOf("callStart"), matches(role = HighlightRole.HTTP_SECTION, text = "[0 ms] callStart: Request{method=GET, url=https://x.io/}", preset = HighlightPreset.OkHttp))
+        assertEquals(listOf("callEnd"), matches(role = HighlightRole.HTTP_SECTION, text = "[87 ms] callEnd", preset = HighlightPreset.OkHttp))
+        assertEquals(emptyList<String>(), matches(role = HighlightRole.HTTP_SECTION, text = "[10002 ms] callFailed: java.io.IOException", preset = HighlightPreset.OkHttp))
+    }
+
+    @Test
+    fun `okhttp leaves plain logs plain`() {
+        val plain = "Basket loaded --> next step, 200 OK, POST done <-- back"
+        HighlightPreset.OkHttp.rules.forEach { rule ->
             assertFalse(rule.pattern, Regex(pattern = rule.pattern).containsMatchIn(input = plain))
             assertFalse(rule.pattern, Regex(pattern = rule.pattern).containsMatchIn(input = "{\"data\":[{\"id\":\"C1871320\",\"status\":\"ok\"}]}"))
         }
