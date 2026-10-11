@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.12.0
+- Problems panel: crashes, ANRs, exceptions, StrictMode violations and warnings, grouped with counts, per
+  session (device stream, app launch). Problems stay after Clear and restarts until deleted: per problem,
+  per session, by age, or by retention (default 30 days). Ignore a noisy problem. Frame drop chart.
+- Gutter icons for crashes, ANRs, exceptions, StrictMode violations and warnings, with quick actions.
+- Copy as Issue (Markdown): exception, app version from the device, device, time and trace.
+- Symbolize Native Crash with the NDK's llvm-symbolizer and the project's unstripped libraries.
+- IDE notification for a crash or ANR while the tool window is hidden (setting, on by default).
+- `context:N` shows N dimmed lines around each match. New `is:` values: `anr`, `exception`, `strictmode`,
+  `problem`.
+- Export menu: Export to File, Open Log File (view a saved log in the pane), Compare With Log File (diff).
+- Pair Device over Wi-Fi from the device picker.
+- Setting: clear the log when the project app starts.
+- Tags panel is a tree: drag tags onto each other to group them, the checkbox shows or hides, rows select
+  (Cmd/Ctrl and Shift for more) for dragging several tags at once. Empty groups go away.
+- Tag descriptions on hover, built-in for common tags, and your own notes.
+- Highlight presets for OkHttp, Ktor and Retrofit with shared role colors.
+- Toolbar buttons in groups; outline Bookmarks icon.
+- Bookmarks are saved in `.idea/workspace.xml` instead of the IDE cache, so Invalidate Caches keeps them.
+  Saved messages are cut at 64 KB.
+- View settings show the buffer, adb and problem settings with a button to open them.
+- Text selection in a message shows a caret.
+- Fixed: hide "jump to latest" when nothing is below; OkHttp end lines skipped, failed calls closed.
+
 ## 0.11.0
 - Bookmarks panel next to Tags and Network: filter, jump, open the saved copy, remove.
 - Bookmarks are saved per project in the IDE cache and survive Clear and a restart. Setting: Keep bookmarks (on by default).
