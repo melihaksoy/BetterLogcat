@@ -1,5 +1,7 @@
 # Better Logcat
 
+[![JetBrains Marketplace](https://img.shields.io/jetbrains/plugin/v/35015?label=marketplace)](https://plugins.jetbrains.com/plugin/35015-better-logcat)
+[![Downloads](https://img.shields.io/jetbrains/plugin/d/35015)](https://plugins.jetbrains.com/plugin/35015-better-logcat)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 A modern Logcat tool window for Android Studio, built with Compose (Jewel). It sits next to the built-in
@@ -69,6 +71,10 @@ More screenshots and a full walkthrough: [User guide](docs/user-guide.md).
 ## Install
 
 Requires Android Studio 2026.2.1 (build 262.9437) or later.
+
+From the IDE: Settings | Plugins | Marketplace, search for **Better Logcat**, then Install. Or open the
+[JetBrains Marketplace page](https://plugins.jetbrains.com/plugin/35015-better-logcat) and click
+**Install to IDE**.
 
 From disk: Settings | Plugins | ⚙ | Install Plugin from Disk, then pick `better-logcat-*.zip`.
 Open the **Better Logcat** tool window. Bind a shortcut in Settings | Keymap | "Better Logcat".
