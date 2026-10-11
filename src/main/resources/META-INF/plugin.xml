@@ -1,28 +1,39 @@
 <idea-plugin>
     <id>com.melihaksoy.betterlogcat</id>
     <name>Better Logcat</name>
-    <vendor>Melih Aksoy</vendor>
+    <vendor url="https://github.com/melihaksoy/BetterLogcat">Melih Aksoy</vendor>
     <resource-bundle>messages.BetterLogcatBundle</resource-bundle>
 
     <description><![CDATA[
-    A modern Logcat tool window for Android Studio.
+    A modern Logcat tool window for Android Studio. It keeps the filter syntax you know and fixes what gets in
+    the way: multi-line messages, long JSON, noisy tags, and crashes that scroll away.
+    <h3>Problems that stay</h3>
     <ul>
-      <li>Multi-line messages and stack traces stay together as one entry, with expand and collapse.</li>
-      <li>Soft wrap toggle, resizable and hideable columns, compact or comfortable rows.</li>
-      <li>Tabs: one tab per device or package. Each tab keeps its own filters.</li>
-      <li>Opens on your project's app by default. Package picker with search.</li>
-      <li>Logcat-style search terms (package:mine, tag:, -tag:, level:, is:crash) with autocomplete, shown as chips.</li>
-      <li>Filter favorites and history with match counts; the last filter is restored.</li>
-      <li>Level toggles and a tag panel to show or hide tags. Package aliases for long names.</li>
-      <li>Double-click a message to select part of its text.</li>
-      <li>Time formats: time, date and time, full, epoch, or time since the previous row.</li>
-      <li>Block selection with Shift and Cmd/Ctrl click, drag selection and smart copy.</li>
-      <li>JSON detection with pretty view and pretty or minified copy.</li>
-      <li>Split panes, each closable with its own close button.</li>
-      <li>Screenshots and screen recordings (MP4 on devices, WebM on emulators).</li>
-      <li>Clickable stack trace frames, pause, clear and export.</li>
+      <li>Problems panel: crashes, ANRs, exceptions, StrictMode violations and warnings, grouped with counts, per session.</li>
+      <li>Kept after Clear and IDE restarts until you delete them. Frame drop chart from Choreographer.</li>
+      <li>Gutter icons with quick actions, Copy as Issue (Markdown), native crash symbolizing, crash notifications.</li>
     </ul>
-    Open it from the "Better Logcat" tool window. Assign a shortcut in Settings | Keymap | "Better Logcat".
+    <h3>Reading and filtering</h3>
+    <ul>
+      <li>Stack traces and chunked bodies (Ktor, OkHttp) stay one entry. JSON is detected, colored and pretty printed.</li>
+      <li>Studio-style search terms with autocomplete: package:mine, tag:, -tag:, level:, is:crash, age:, context:N.</li>
+      <li>Favorites and history with match counts. Find bar that does not change the filter.</li>
+      <li>Tags panel as a tree: show or hide with checkboxes, drag tags together into groups, tag descriptions.</li>
+      <li>Keyword highlights and presets for OkHttp, Ktor and Retrofit. Clickable stack frames. R8 retrace.</li>
+    </ul>
+    <h3>Working with entries</h3>
+    <ul>
+      <li>Block selection, smart copy, free text selection in any cell.</li>
+      <li>Bookmarks that survive Clear and restarts. Network panel with Copy as cURL. Compare two entries.</li>
+      <li>Export, open a saved log, or compare the log with a saved file.</li>
+    </ul>
+    <h3>Devices and layout</h3>
+    <ul>
+      <li>Tabs and split panes, each with its own device and filter.</li>
+      <li>Pair devices over Wi-Fi. Screenshots and screen recordings.</li>
+    </ul>
+    Open the "Better Logcat" tool window. Everything stays on your machine: the plugin sends nothing over the network.
+    Open source (Apache 2.0): <a href="https://github.com/melihaksoy/BetterLogcat">github.com/melihaksoy/BetterLogcat</a>.
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>

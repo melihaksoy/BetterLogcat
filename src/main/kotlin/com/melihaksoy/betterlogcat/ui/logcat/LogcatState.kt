@@ -11,6 +11,7 @@ import com.melihaksoy.betterlogcat.network.NetworkCall
 import com.melihaksoy.betterlogcat.ui.logcat.model.BookmarkUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.LogcatContentUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.NetworkDetailUiModel
+import com.melihaksoy.betterlogcat.ui.logcat.model.ProblemsUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SavedFiltersUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SelectionUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.ViewOptionsUiModel
@@ -57,6 +58,8 @@ data class LogcatState(
     /** The call open in the network details pane; null when none is open. */
     val networkDetail: NetworkDetailUiModel? = null,
     val crashCount: Int = 0,
+    /** Problems of this pane's session and the saved sessions before it. */
+    val problems: ProblemsUiModel = ProblemsUiModel(),
     /** Ids of bookmarked lines that are in this pane's log. */
     val bookmarkedIds: Set<Long> = emptySet(),
     /** Every bookmark of the project, oldest first, also lines that left the log. */
@@ -67,6 +70,10 @@ data class LogcatState(
     /** Name of the loaded R8/ProGuard mapping file. Empty when none. */
     val mappingFileName: String = "",
     val pausedNewCount: Int = 0,
+    /** Ids of lines shown only as context around matches (`context:N`). They draw dimmed. */
+    val contextIds: Set<Long> = emptySet(),
+    /** A saved log file open in this pane instead of the device stream. Empty when live. */
+    val openedFileName: String = "",
 ) {
     val selectedDevice: Device?
         get() = devices.firstOrNull { it.serial == selectedSerial }

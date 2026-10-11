@@ -1,6 +1,31 @@
 package com.melihaksoy.betterlogcat.ui.logcat.popup
 
 import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.notification.NotificationAction
+import com.intellij.notification.NotificationGroupManager
+import com.intellij.notification.NotificationType
+import com.intellij.openapi.application.EDT
+import com.intellij.openapi.components.service
+import com.intellij.openapi.fileChooser.FileChooser
+import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
+import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.openapi.wm.WindowManager
+import com.melihaksoy.betterlogcat.format.IssueReport
+import com.melihaksoy.betterlogcat.format.LogCopyFormatter
+import com.melihaksoy.betterlogcat.ide.AdbCommands
+import com.melihaksoy.betterlogcat.ide.BetterLogcatProjectService
+import com.melihaksoy.betterlogcat.ide.NativeSymbolizer
+import com.melihaksoy.betterlogcat.ide.SymbolizeResult
+import com.melihaksoy.betterlogcat.media.MediaFiles
+import com.melihaksoy.betterlogcat.model.DeviceState
+import com.melihaksoy.betterlogcat.model.LogProblems
+import com.melihaksoy.betterlogcat.model.ProblemSession
+import com.melihaksoy.betterlogcat.model.SavedProblem
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.concurrent.TimeUnit
 import com.intellij.ide.DataManager
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.DefaultActionGroup
@@ -34,6 +59,7 @@ import com.melihaksoy.betterlogcat.model.Device
 import com.melihaksoy.betterlogcat.model.JsonContent
 import com.melihaksoy.betterlogcat.model.LogColumn
 import com.melihaksoy.betterlogcat.model.LogEntry
+import com.melihaksoy.betterlogcat.model.ProblemKind
 import com.melihaksoy.betterlogcat.model.TimeFormat
 import com.melihaksoy.betterlogcat.settings.BetterLogcatConfigurable
 import com.melihaksoy.betterlogcat.ui.logcat.LogcatIntent
@@ -60,15 +86,30 @@ class IdeLogcatPopups(
 
     override fun showDevicePicker(at: Point) {
         val current = state()
-        if (current.devices.isEmpty()) return
         showChooser(
             at = at,
             title = BetterLogcatBundle.message("popup.devices.title"),
-            items = current.devices,
-            selected = current.selectedDevice,
-            label = ::deviceLabel,
-            onChosen = { onIntent(LogcatIntent.SelectDevice(serial = it.serial)) },
+            items = current.devices.map { DeviceChoice.Pick(device = it) } + DeviceChoice.PairOverWifi,
+            selected = current.selectedDevice?.let { DeviceChoice.Pick(device = it) },
+            label = { choice ->
+                when (choice) {
+                    is DeviceChoice.Pick -> deviceLabel(device = choice.device)
+                    DeviceChoice.PairOverWifi -> BetterLogcatBundle.message("wifi.menu")
+                }
+            },
+            onChosen = { choice ->
+                when (choice) {
+                    is DeviceChoice.Pick -> onIntent(LogcatIntent.SelectDevice(serial = choice.device.serial))
+                    DeviceChoice.PairOverWifi -> pairOverWifi()
+                }
+            },
         )
+    }
+
+    /** A row of the device picker: a device, or the Wi-Fi pairing action at the end. */
+    private sealed interface DeviceChoice {
+        data class Pick(val device: Device) : DeviceChoice
+        data object PairOverWifi : DeviceChoice
     }
 
     override fun showPackagePicker(at: Point) {
@@ -121,6 +162,16 @@ class IdeLogcatPopups(
             group.add(action(text = BetterLogcatBundle.message("menu.copyJsonMinified")) { onIntent(LogcatIntent.Copy(mode = CopyMode.JSON_MINIFIED)) })
         }
         group.add(action(text = BetterLogcatBundle.message("menu.openInEditor")) { openInEditor(entry = entry) })
+        if (entry.problem.let { it != null && it != ProblemKind.WARNING }) {
+            group.add(
+                action(text = BetterLogcatBundle.message("menu.copyAsIssue")) {
+                    copyAsIssue(
+                        entry = entry,
+                        processName = current.processNames[entry.pid].orEmpty(),
+                    )
+                },
+            )
+        }
         CurlBuilder.fromMessage(message = entry.message)?.let { curl ->
             group.add(action(text = BetterLogcatBundle.message("menu.copyCurl")) { copyText(text = curl) })
         }
@@ -214,7 +265,7 @@ class IdeLogcatPopups(
         if (currentGroup != null) {
             group.add(
                 action(text = BetterLogcatBundle.message("tags.menu.removeFromGroup", currentGroup.name)) {
-                    onIntent(LogcatIntent.RemoveTagFromGroup(tag = tag))
+                    onIntent(LogcatIntent.UngroupTags(tags = listOf(tag)))
                 },
             )
         }
@@ -275,7 +326,9 @@ class IdeLogcatPopups(
     }
 
     private fun addToNewGroup(tag: String) {
-        val name = askGroupName(initial = "") ?: return
+        val name = askGroupName(
+            initial = TagGroups.nextName(groups = state().tagGroups) { BetterLogcatBundle.message("tags.group.defaultName", it) },
+        ) ?: return
         onIntent(
             LogcatIntent.AddTagToGroup(
                 tag = tag,
@@ -348,9 +401,32 @@ class IdeLogcatPopups(
                 },
             )
         }
-        if (gutter.isCrash) {
+        gutter.problem?.let { problem ->
             group.addSeparator()
-            group.add(action(text = BetterLogcatBundle.message("gutter.copyCrash")) { copyText(text = entry.message) })
+            val copyKey = when (problem) {
+                ProblemKind.CRASH -> "gutter.copyCrash"
+                ProblemKind.ANR, ProblemKind.EXCEPTION, ProblemKind.STRICT_MODE -> "gutter.copyException"
+                ProblemKind.WARNING -> null
+            }
+            copyKey?.let { group.add(action(text = BetterLogcatBundle.message(it)) { copyText(text = entry.message) }) }
+            if (problem != ProblemKind.WARNING) {
+                group.add(
+                    action(text = BetterLogcatBundle.message("menu.copyAsIssue")) {
+                        copyAsIssue(
+                            entry = entry,
+                            processName = current.processNames[entry.pid].orEmpty(),
+                        )
+                    },
+                )
+            }
+            if (LogProblems.isNativeCrash(tag = entry.tag, message = entry.message)) {
+                group.add(action(text = BetterLogcatBundle.message("native.symbolize")) { onIntent(LogcatIntent.SymbolizeNativeCrash(id = entry.id)) })
+            }
+            group.add(
+                action(text = BetterLogcatBundle.message("gutter.showProblems")) {
+                    if (current.viewOptions.sidePanel != SidePanel.PROBLEMS) onIntent(LogcatIntent.ToggleSidePanel(panel = SidePanel.PROBLEMS))
+                },
+            )
         }
         group.addSeparator()
         group.add(action(text = BetterLogcatBundle.message("menu.openInEditor")) { openInEditor(entry = entry) })
@@ -467,6 +543,285 @@ class IdeLogcatPopups(
         )
     }
 
+    override fun showProblemMenu(
+        session: ProblemSession,
+        problem: SavedProblem,
+        at: Point,
+    ) {
+        val group = DefaultActionGroup()
+        group.add(
+            action(text = BetterLogcatBundle.message("problems.menu.goTo")) {
+                onIntent(
+                    LogcatIntent.JumpToProblem(
+                        sessionId = session.id,
+                        key = problem.key,
+                        back = 0,
+                    ),
+                )
+            },
+        )
+        group.add(action(text = BetterLogcatBundle.message("menu.openInEditor")) { openInEditor(entry = problem.toLogEntry()) })
+        group.add(action(text = BetterLogcatBundle.message("problems.menu.copy")) { copyText(text = problem.sample) })
+        if (problem.kind != ProblemKind.WARNING) {
+            group.add(
+                action(text = BetterLogcatBundle.message("menu.copyAsIssue")) {
+                    copyAsIssue(
+                        entry = problem.toLogEntry(),
+                        processName = problem.processName,
+                    )
+                },
+            )
+        }
+        group.addSeparator()
+        group.add(action(text = BetterLogcatBundle.message("menu.showOnlyTag", problem.tag)) { onIntent(LogcatIntent.ShowOnlyTag(tag = problem.tag)) })
+        group.add(action(text = BetterLogcatBundle.message("menu.hideTag", problem.tag)) { onIntent(LogcatIntent.HideTag(tag = problem.tag)) })
+        group.add(action(text = BetterLogcatBundle.message("problems.menu.ignore")) { onIntent(LogcatIntent.IgnoreProblem(key = problem.key)) })
+        group.addSeparator()
+        group.add(
+            action(text = BetterLogcatBundle.message("problems.menu.delete")) {
+                onIntent(
+                    LogcatIntent.DeleteProblem(
+                        sessionId = session.id,
+                        key = problem.key,
+                    ),
+                )
+            },
+        )
+        showMenu(
+            at = at,
+            group = group,
+        )
+    }
+
+    override fun showProblemSessionMenu(
+        session: ProblemSession,
+        at: Point,
+    ) {
+        val group = DefaultActionGroup()
+        group.add(
+            action(text = BetterLogcatBundle.message("problems.menu.rename")) {
+                val title = Messages.showInputDialog(
+                    project,
+                    BetterLogcatBundle.message("problems.rename.prompt"),
+                    BetterLogcatBundle.message("problems.rename.title"),
+                    null,
+                    session.title,
+                    null,
+                )
+                if (!title.isNullOrBlank()) {
+                    onIntent(
+                        LogcatIntent.RenameProblemSession(
+                            id = session.id,
+                            title = title,
+                        ),
+                    )
+                }
+            },
+        )
+        group.add(action(text = BetterLogcatBundle.message("problems.menu.copySummary")) { copyText(text = sessionSummary(session = session)) })
+        group.addSeparator()
+        group.add(action(text = BetterLogcatBundle.message("problems.menu.deleteSession")) { onIntent(LogcatIntent.DeleteProblemSession(id = session.id)) })
+        group.add(
+            action(text = BetterLogcatBundle.message("problems.menu.deleteBefore")) {
+                onIntent(LogcatIntent.DeleteProblemHistoryBefore(epochMillis = session.startedEpochMillis))
+            },
+        )
+        showMenu(
+            at = at,
+            group = group,
+        )
+    }
+
+    override fun showProblemsPanelMenu(at: Point) {
+        val group = DefaultActionGroup()
+        val now = System.currentTimeMillis()
+        listOf(1, 7, 30).forEach { days ->
+            group.add(
+                action(text = BetterLogcatBundle.message("problems.menu.deleteOlder", days)) {
+                    onIntent(LogcatIntent.DeleteProblemHistoryBefore(epochMillis = now - TimeUnit.DAYS.toMillis(days.toLong())))
+                },
+            )
+        }
+        group.add(action(text = BetterLogcatBundle.message("problems.menu.deleteAll")) { onIntent(LogcatIntent.DeleteProblemHistoryBefore(epochMillis = Long.MAX_VALUE)) })
+        val ignored = state().problems.ignoredCount
+        if (ignored > 0) {
+            group.addSeparator()
+            group.add(action(text = BetterLogcatBundle.message("problems.menu.resetIgnored", ignored)) { onIntent(LogcatIntent.ResetIgnoredProblems) })
+        }
+        group.addSeparator()
+        group.add(action(text = BetterLogcatBundle.message("problems.menu.settings")) { openSettings() })
+        showMenu(
+            at = at,
+            group = group,
+        )
+    }
+
+    override fun showExportMenu(at: Point) {
+        val group = DefaultActionGroup()
+        group.add(action(text = BetterLogcatBundle.message("export.menu.export")) { onIntent(LogcatIntent.Export) })
+        group.add(action(text = BetterLogcatBundle.message("export.menu.open")) { chooseLogFile { onIntent(LogcatIntent.OpenLogFile(file = it)) } })
+        group.add(action(text = BetterLogcatBundle.message("export.menu.compare")) { chooseLogFile { compareWithFile(file = it) } })
+        if (state().openedFileName.isNotEmpty()) {
+            group.addSeparator()
+            group.add(action(text = BetterLogcatBundle.message("file.backToLive")) { onIntent(LogcatIntent.CloseLogFile) })
+        }
+        showMenu(
+            at = at,
+            group = group,
+        )
+    }
+
+    override fun noticeCrash(
+        entryId: Long,
+        kind: ProblemKind,
+        title: String,
+    ) {
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow(TOOL_WINDOW_ID) ?: return
+        if (toolWindow.isVisible) return
+        val key = if (kind == ProblemKind.ANR) "notification.anr" else "notification.crash"
+        NotificationGroupManager.getInstance()
+            .getNotificationGroup(MediaFiles.NOTIFICATION_GROUP)
+            .createNotification(BetterLogcatBundle.message(key, title), NotificationType.ERROR)
+            .addAction(
+                NotificationAction.createSimpleExpiring(BetterLogcatBundle.message("notification.show")) {
+                    toolWindow.activate { onIntent(LogcatIntent.JumpToEntry(id = entryId)) }
+                },
+            )
+            .notify(project)
+    }
+
+    override fun symbolizeNativeCrash(
+        crash: LogEntry,
+        backtrace: List<String>,
+    ) {
+        val service = project.service<BetterLogcatProjectService>()
+        service.scope.launch {
+            val result = withContext(context = Dispatchers.IO) { NativeSymbolizer(project = project).symbolize(backtrace = backtrace) }
+            withContext(context = Dispatchers.EDT) {
+                when (result) {
+                    is SymbolizeResult.Done -> openText(
+                        name = "native-crash-${crash.pid}.txt",
+                        text = crash.message + "\n\n" + result.text,
+                    )
+                    SymbolizeResult.NoBacktrace -> MediaFiles.notifyError(project = project, message = BetterLogcatBundle.message("native.noBacktrace"))
+                    SymbolizeResult.NoSymbolizer -> MediaFiles.notifyError(project = project, message = BetterLogcatBundle.message("native.noSymbolizer"))
+                    is SymbolizeResult.NoLibraries -> MediaFiles.notifyError(
+                        project = project,
+                        message = BetterLogcatBundle.message("native.noLibraries", result.names.joinToString(separator = ", ")),
+                    )
+                }
+            }
+        }
+    }
+
+    /** Copies [entry] as Markdown for an issue, with the app version read from the device. */
+    private fun copyAsIssue(
+        entry: LogEntry,
+        processName: String,
+    ) {
+        val current = state()
+        val device = current.selectedDevice
+        val packageName = processName.substringBefore(delimiter = ':')
+        val service = project.service<BetterLogcatProjectService>()
+        service.scope.launch {
+            val version = if (device?.state == DeviceState.ONLINE && packageName.isNotEmpty()) {
+                AdbCommands(session = service.adbSession).appVersion(
+                    serial = device.serial,
+                    packageName = packageName,
+                )
+            } else {
+                null
+            }
+            val text = IssueReport.markdown(
+                entry = entry,
+                packageName = packageName,
+                version = version,
+                device = device,
+            )
+            withContext(context = Dispatchers.EDT) {
+                copyText(text = text)
+                WindowManager.getInstance().getStatusBar(project)?.info = BetterLogcatBundle.message("status.copiedIssue")
+            }
+        }
+    }
+
+    private fun sessionSummary(session: ProblemSession): String = buildString {
+        append(session.title).append('\n')
+        session.problems.forEach { problem ->
+            append("- ").append(problem.title)
+            if (problem.detail.isNotEmpty()) append(": ").append(problem.detail)
+            append(" (").append(problem.tag).append(", ×").append(problem.count).append(")\n")
+        }
+    }
+
+    private fun chooseLogFile(onChosen: (File) -> Unit) {
+        val descriptor = FileChooserDescriptorFactory.createSingleFileDescriptor("txt")
+            .withTitle(BetterLogcatBundle.message("file.choose.title"))
+        FileChooser.chooseFile(descriptor, project, null) { chosen -> onChosen(File(chosen.path)) }
+    }
+
+    /** The shown log next to a saved log file, in the IDE's diff viewer. */
+    private fun compareWithFile(file: File) {
+        val current = state()
+        val text = LogCopyFormatter.format(
+            entries = current.entries,
+            mode = CopyMode.FULL,
+            processNames = current.processNames,
+        )
+        val factory = DiffContentFactory.getInstance()
+        val request = SimpleDiffRequest(
+            BetterLogcatBundle.message("compare.fileTitle", file.name),
+            factory.create(project, text, PlainTextFileType.INSTANCE),
+            factory.create(project, runCatching { file.readText() }.getOrDefault(defaultValue = ""), PlainTextFileType.INSTANCE),
+            BetterLogcatBundle.message("compare.current"),
+            file.name,
+        )
+        DiffManager.getInstance().showDiff(project, request)
+    }
+
+    private fun openText(
+        name: String,
+        text: String,
+    ) {
+        val file = LightVirtualFile(name, PlainTextFileType.INSTANCE, text)
+        file.isWritable = false
+        FileEditorManager.getInstance(project).openFile(file, true)
+    }
+
+    private fun pairOverWifi() {
+        val dialog = WifiPairingDialog(project = project)
+        if (!dialog.showAndGet()) return
+        val service = project.service<BetterLogcatProjectService>()
+        val commands = AdbCommands(session = service.adbSession)
+        service.scope.launch {
+            val answers = buildList {
+                if (dialog.pairAddress.isNotEmpty()) {
+                    add(
+                        runCatching {
+                            commands.pair(
+                                address = dialog.pairAddress,
+                                code = dialog.pairCode,
+                            )
+                        }.getOrElse { it.message.orEmpty() },
+                    )
+                }
+                if (dialog.connectAddress.isNotEmpty()) {
+                    add(runCatching { commands.connect(address = dialog.connectAddress) }.getOrElse { it.message.orEmpty() })
+                }
+            }
+            val text = answers.joinToString(separator = "\n").ifBlank { BetterLogcatBundle.message("wifi.noAnswer") }
+            val isFailed = answers.any { answer -> FAILURE_WORDS.any { answer.contains(other = it, ignoreCase = true) } }
+            NotificationGroupManager.getInstance()
+                .getNotificationGroup(MediaFiles.NOTIFICATION_GROUP)
+                .createNotification(
+                    BetterLogcatBundle.message("wifi.title"),
+                    text,
+                    if (isFailed) NotificationType.ERROR else NotificationType.INFORMATION,
+                )
+                .notify(project)
+        }
+    }
+
     private fun <T> showChooser(
         at: Point,
         title: String,
@@ -515,6 +870,9 @@ class IdeLogcatPopups(
     }
 
     companion object {
+        private const val TOOL_WINDOW_ID = "Better Logcat"
+        private val FAILURE_WORDS = listOf("failed", "error", "unable", "cannot", "timed out")
+
         fun deviceLabel(device: Device): String = buildString {
             append(device.name)
             if (device.androidVersion.isNotEmpty()) {

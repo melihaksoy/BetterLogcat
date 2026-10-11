@@ -12,6 +12,7 @@ import com.melihaksoy.betterlogcat.domain.usecase.ProcessSnapshot
 import com.melihaksoy.betterlogcat.domain.usecase.StreamLogcatInteractor
 import com.melihaksoy.betterlogcat.ide.AppearanceStore
 import com.melihaksoy.betterlogcat.ide.BookmarkStore
+import com.melihaksoy.betterlogcat.ide.ProblemHistoryStore
 import com.melihaksoy.betterlogcat.ide.TagNotesStore
 import com.melihaksoy.betterlogcat.ide.PackageAliasStore
 import com.melihaksoy.betterlogcat.ide.SourceNavigator
@@ -51,6 +52,7 @@ class LogcatViewModelTest : BasePlatformTestCase() {
         BetterLogcatSettings.getInstance().loadState(BetterLogcatSettings.SettingsState())
         // The store is a project service and the light test project is shared, so start empty.
         BookmarkStore.getInstance(project = project).loadState(state = BookmarkStore.BookmarksState())
+        ProblemHistoryStore.getInstance(project = project).loadState(state = ProblemHistoryStore.HistoryState())
         scope = CoroutineScope(context = SupervisorJob() + Dispatchers.Default)
         viewModel = LogcatViewModel(
             scope = scope,
@@ -87,6 +89,7 @@ class LogcatViewModelTest : BasePlatformTestCase() {
             appearanceStore = AppearanceStore.getInstance(),
             bookmarkStore = BookmarkStore.getInstance(project = project),
             tagNotesStore = TagNotesStore.getInstance(),
+            problemHistoryStore = ProblemHistoryStore.getInstance(project = project),
         )
     }
 
@@ -186,6 +189,38 @@ class LogcatViewModelTest : BasePlatformTestCase() {
         )
         send(again)
         assertEquals(1_000L, await { it.bookmarks.singleOrNull()?.liveId == 1_000L }.bookmarkedIds.single())
+    }
+
+    fun `test problems stay after clear and are saved to the history`() {
+        send(
+            entry(tag = "AndroidRuntime", message = "FATAL EXCEPTION: main\njava.lang.IllegalStateException: boom", level = LogLevel.ERROR),
+            entry(tag = "Choreographer", message = "Skipped 42 frames!", level = LogLevel.WARN),
+        )
+        await { it.problems.currentCount == 2 }
+
+        viewModel.onIntent(LogcatIntent.Clear)
+
+        val cleared = await { it.entries.isEmpty() && it.totalCount == 0 }
+        assertEquals(listOf("IllegalStateException", "Skipped 42 frames!"), cleared.problems.current?.problems?.map { it.title })
+        val saved = runBlocking {
+            withTimeout(timeMillis = 5_000) { ProblemHistoryStore.getInstance(project = project).sessions.first { it.isNotEmpty() } }
+        }
+        assertEquals(2, saved.single().problems.size)
+    }
+
+    fun `test the project app starting begins a new session and can clear the log`() {
+        BetterLogcatSettings.getInstance().state.clearOnAppLaunch = true
+        send(entry(tag = "Garage", message = "Low memory", level = LogLevel.WARN))
+        await { it.problems.currentCount == 1 }
+
+        send(
+            entry(tag = "ActivityManager", message = "Start proc $APP_PID:$APP/u0a123 for pre-top-activity {$APP/$APP.MainActivity}"),
+            entry(tag = "Garage", message = "Cold start"),
+        )
+
+        val launched = await { state -> state.problems.current?.title?.contains(APP) == true && state.entries.size == 2 }
+        assertEquals(0, launched.problems.currentCount)
+        assertEquals(listOf("Low memory"), launched.problems.history.single().problems.map { it.title })
     }
 
     private fun send(vararg entries: LogEntry) {

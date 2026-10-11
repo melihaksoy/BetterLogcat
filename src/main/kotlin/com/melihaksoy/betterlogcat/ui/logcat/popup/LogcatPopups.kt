@@ -1,6 +1,9 @@
 package com.melihaksoy.betterlogcat.ui.logcat.popup
 
 import com.melihaksoy.betterlogcat.model.LogEntry
+import com.melihaksoy.betterlogcat.model.ProblemKind
+import com.melihaksoy.betterlogcat.model.ProblemSession
+import com.melihaksoy.betterlogcat.model.SavedProblem
 import com.melihaksoy.betterlogcat.ui.logcat.component.GutterUiModel
 import java.awt.Point
 
@@ -38,6 +41,38 @@ interface LogcatPopups {
         at: Point,
     )
 
+    /** Right-click on a problem in the Problems panel. */
+    fun showProblemMenu(
+        session: ProblemSession,
+        problem: SavedProblem,
+        at: Point,
+    )
+
+    /** Right-click on a session in the Problems panel: rename, delete. */
+    fun showProblemSessionMenu(
+        session: ProblemSession,
+        at: Point,
+    )
+
+    /** The Problems panel's ⋮ menu: delete history by age, reset ignored problems. */
+    fun showProblemsPanelMenu(at: Point)
+
+    /** The export button: export, open a log file, compare with a log file. */
+    fun showExportMenu(at: Point)
+
+    /** A crash or ANR arrived: notify when the tool window is hidden. */
+    fun noticeCrash(
+        entryId: Long,
+        kind: ProblemKind,
+        title: String,
+    )
+
+    /** Symbolizes a native crash's backtrace with the project's native libraries and opens the result. */
+    fun symbolizeNativeCrash(
+        crash: LogEntry,
+        backtrace: List<String>,
+    )
+
     object None : LogcatPopups {
         override fun showDevicePicker(at: Point) = Unit
         override fun showPackagePicker(at: Point) = Unit
@@ -62,6 +97,26 @@ interface LogcatPopups {
         override fun showTagGroupMenu(
             groupName: String,
             at: Point,
+        ) = Unit
+        override fun showProblemMenu(
+            session: ProblemSession,
+            problem: SavedProblem,
+            at: Point,
+        ) = Unit
+        override fun showProblemSessionMenu(
+            session: ProblemSession,
+            at: Point,
+        ) = Unit
+        override fun showProblemsPanelMenu(at: Point) = Unit
+        override fun showExportMenu(at: Point) = Unit
+        override fun noticeCrash(
+            entryId: Long,
+            kind: ProblemKind,
+            title: String,
+        ) = Unit
+        override fun symbolizeNativeCrash(
+            crash: LogEntry,
+            backtrace: List<String>,
         ) = Unit
     }
 }

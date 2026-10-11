@@ -161,6 +161,45 @@ class RenderProbeTest : BasePlatformTestCase() {
         }
     }
 
+    fun testRenderTagTree() {
+        val dir = System.getenv("RENDER_DIR") ?: return
+        render(File(dir, "tag-tree.png"), width = 640, height = 1000) {
+            com.melihaksoy.betterlogcat.ui.logcat.component.TagsPanel(
+                tagCounts = LogcatPreviewData.tagCounts,
+                appTags = setOf("OkHttp", "GarageApp", "AndroidRuntime", "ActivityThread"),
+                filter = LogFilter(),
+                colors = com.melihaksoy.betterlogcat.ui.theme.rememberLogColors(),
+                tagGroups = listOf(
+                    com.melihaksoy.betterlogcat.model.TagGroup(name = "Group 1", tags = listOf("art", "adbd")),
+                    com.melihaksoy.betterlogcat.model.TagGroup(name = "Ui", tags = listOf("ViewRootImpl", "Choreographer")),
+                ),
+                onIntent = {},
+            )
+        }
+    }
+
+    fun testRenderNetworkDetail() {
+        val dir = System.getenv("RENDER_DIR") ?: return
+        val response = com.melihaksoy.betterlogcat.model.LogEntry(
+            id = 2, epochSeconds = 1_791_540_000L, nanos = 0, pid = 14302, tid = 14330,
+            level = com.melihaksoy.betterlogcat.model.LogLevel.INFO, tag = "Ktor Client",
+            message = "RESPONSE: 200 OK\nMETHOD: GET\nFROM: https://api.vintagegarage.app/v1/listings/88213\nCOMMON HEADERS\n-> content-type: application/json\nBODY START\n{\"id\":88213,\"title\":\"1991 Mercedes-Benz 300 CE\",\"sold\":false}\nBODY END",
+        )
+        val call = com.melihaksoy.betterlogcat.network.NetworkCall(
+            method = "GET", url = "https://api.vintagegarage.app/v1/listings/88213",
+            requestEntryId = 1, requestEpochMillis = 0, responseEntryId = 2, statusCode = 200, durationMillis = 340,
+        )
+        render(File(dir, "network-detail.png"), width = 900, height = 900) {
+            com.melihaksoy.betterlogcat.ui.logcat.component.NetworkPanel(
+                calls = listOf(call),
+                detail = com.melihaksoy.betterlogcat.ui.logcat.model.NetworkDetailUiModel(call = call, request = null, response = response),
+                colors = com.melihaksoy.betterlogcat.ui.theme.rememberLogColors(),
+                keywords = com.melihaksoy.betterlogcat.ui.logcat.component.KeywordHighlighter(rules = com.melihaksoy.betterlogcat.model.PresetHighlights(enabledIds = setOf("ktor")).rules()),
+                onIntent = {},
+            )
+        }
+    }
+
     fun testRenderSelectionAndJson() {
         val dir = System.getenv("RENDER_DIR") ?: return
         val jsonEntry = com.melihaksoy.betterlogcat.model.LogEntry(
@@ -245,6 +284,112 @@ class RenderProbeTest : BasePlatformTestCase() {
                 ),
                 popups = LogcatPopups.None,
                 paneActions = com.melihaksoy.betterlogcat.ui.logcat.pane.PaneActions.None,
+                onIntent = {},
+            )
+        }
+    }
+
+    fun testRenderProblems() {
+        val dir = System.getenv("RENDER_DIR") ?: return
+        val base = LogcatPreviewData.logsState
+        val extra = listOf(
+            com.melihaksoy.betterlogcat.model.LogEntry(
+                id = 900, epochSeconds = 1_791_540_100L, nanos = 0, pid = 14302, tid = 14330,
+                level = LogLevel.ERROR, tag = "RealImageLoader",
+                message = "java.lang.IllegalStateException: Unable to create a fetcher that supports: https://x.io/a.png\n\tat coil3.intercept.EngineInterceptor.fetch(EngineInterceptor.kt:164)",
+            ),
+            com.melihaksoy.betterlogcat.model.LogEntry(
+                id = 901, epochSeconds = 1_791_540_101L, nanos = 0, pid = 14302, tid = 14330,
+                level = LogLevel.WARN, tag = "Choreographer", message = "Skipped 42 frames!  The application may be doing too much work on its main thread.",
+            ),
+        )
+        val entries = base.entries + extra
+        render(File(dir, "problems.png"), width = 2400, height = 900) {
+            LogcatContent(
+                state = base.copy(
+                    entries = entries,
+                    problems = com.melihaksoy.betterlogcat.ui.logcat.model.ProblemsUiModel(
+                        current = com.melihaksoy.betterlogcat.model.ProblemSession(
+                            id = "live", title = "Google Pixel 9", startedEpochMillis = System.currentTimeMillis(),
+                            problems = com.melihaksoy.betterlogcat.model.ProblemRecorder().let { recorder ->
+                                entries.forEach { recorder.record(entry = it, processName = "com.vintagegarage.app", ignoredKeys = emptySet()) }
+                                recorder.snapshot()
+                            },
+                        ),
+                        history = listOf(
+                            com.melihaksoy.betterlogcat.model.ProblemSession(
+                                id = "old", title = "com.vintagegarage.app launched · Google Pixel 9", startedEpochMillis = System.currentTimeMillis() - 86_400_000L,
+                                problems = listOf(
+                                    com.melihaksoy.betterlogcat.model.SavedProblem(
+                                        key = "k", kind = com.melihaksoy.betterlogcat.model.ProblemKind.ANR, title = "ANR in com.vintagegarage.app", detail = "Input dispatching timed out",
+                                        tag = "ActivityManager", count = 1, firstEpochMillis = 0, lastEpochMillis = 0, level = LogLevel.ERROR, pid = 1, tid = 1, processName = "", sample = "",
+                                    ),
+                                ),
+                            ),
+                        ),
+                        frameSkips = listOf(
+                            com.melihaksoy.betterlogcat.model.FrameSkip(epochMillis = 1_000L, frames = 42),
+                            com.melihaksoy.betterlogcat.model.FrameSkip(epochMillis = 40_000L, frames = 120),
+                            com.melihaksoy.betterlogcat.model.FrameSkip(epochMillis = 90_000L, frames = 31),
+                        ),
+                    ),
+                    viewOptions = base.viewOptions.copy(sidePanel = com.melihaksoy.betterlogcat.ui.logcat.model.SidePanel.PROBLEMS),
+                ),
+                popups = LogcatPopups.None,
+                paneActions = com.melihaksoy.betterlogcat.ui.logcat.pane.PaneActions.None,
+                onIntent = {},
+            )
+        }
+    }
+
+    fun testRenderProblemsPanel() {
+        val dir = System.getenv("RENDER_DIR") ?: return
+        val now = System.currentTimeMillis()
+        fun problem(
+            kind: com.melihaksoy.betterlogcat.model.ProblemKind,
+            title: String,
+            detail: String,
+            tag: String,
+            count: Int,
+            agoSeconds: Long,
+        ) = com.melihaksoy.betterlogcat.model.SavedProblem(
+            key = kind.name + tag + title, kind = kind, title = title, detail = detail, tag = tag, count = count,
+            firstEpochMillis = now - agoSeconds * 1_000, lastEpochMillis = now - agoSeconds * 1_000, level = LogLevel.ERROR,
+            pid = 14_302, tid = 14_302, processName = "com.vintagegarage.app", sample = "$title: $detail",
+        )
+        val kinds = com.melihaksoy.betterlogcat.model.ProblemKind.entries
+        render(File(dir, "problems-panel.png"), width = 820, height = 1100) {
+            com.melihaksoy.betterlogcat.ui.logcat.component.ProblemsPanel(
+                problems = com.melihaksoy.betterlogcat.ui.logcat.model.ProblemsUiModel(
+                    current = com.melihaksoy.betterlogcat.model.ProblemSession(
+                        id = "live", title = "Google Pixel 9", startedEpochMillis = now - 600_000,
+                        problems = listOf(
+                            problem(kind = kinds[0], title = "IllegalStateException", detail = "Listing id must not be blank", tag = "AndroidRuntime", count = 1, agoSeconds = 40),
+                            problem(kind = kinds[1], title = "ANR in com.vintagegarage.app", detail = "Input dispatching timed out", tag = "ActivityManager", count = 1, agoSeconds = 200),
+                            problem(kind = kinds[2], title = "UnknownHostException", detail = "Unable to resolve host \"api.vintagegarage.app\"", tag = "OkHttp", count = 4, agoSeconds = 90),
+                            problem(kind = kinds[3], title = "DiskReadViolation", detail = "~duration=48 ms", tag = "StrictMode", count = 2, agoSeconds = 300),
+                            problem(kind = kinds[4], title = "Accessing hidden method Landroid/view/View;->computeFitSystemWindows", detail = "", tag = "garage.app", count = 12, agoSeconds = 500),
+                        ),
+                    ),
+                    history = listOf(
+                        com.melihaksoy.betterlogcat.model.ProblemSession(
+                            id = "old", title = "com.vintagegarage.app launched · Google Pixel 9", startedEpochMillis = now - 86_400_000L,
+                            problems = listOf(problem(kind = kinds[2], title = "SocketTimeoutException", detail = "timeout", tag = "OkHttp", count = 3, agoSeconds = 86_000)),
+                        ),
+                        com.melihaksoy.betterlogcat.model.ProblemSession(
+                            id = "older", title = "Pixel 6a", startedEpochMillis = now - 5 * 86_400_000L,
+                            problems = listOf(problem(kind = kinds[0], title = "SIGSEGV", detail = "Fatal signal 11 (SIGSEGV)", tag = "libc", count = 1, agoSeconds = 430_000)),
+                        ),
+                    ),
+                    frameSkips = listOf(
+                        com.melihaksoy.betterlogcat.model.FrameSkip(epochMillis = now - 280_000, frames = 31),
+                        com.melihaksoy.betterlogcat.model.FrameSkip(epochMillis = now - 200_000, frames = 64),
+                        com.melihaksoy.betterlogcat.model.FrameSkip(epochMillis = now - 120_000, frames = 120),
+                        com.melihaksoy.betterlogcat.model.FrameSkip(epochMillis = now - 60_000, frames = 42),
+                        com.melihaksoy.betterlogcat.model.FrameSkip(epochMillis = now, frames = 18),
+                    ),
+                ),
+                colors = com.melihaksoy.betterlogcat.ui.theme.rememberLogColors(),
                 onIntent = {},
             )
         }

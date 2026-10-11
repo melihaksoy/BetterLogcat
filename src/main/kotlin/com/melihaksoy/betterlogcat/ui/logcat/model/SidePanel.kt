@@ -6,4 +6,5 @@ enum class SidePanel {
     TAGS,
     NETWORK,
     BOOKMARKS,
+    PROBLEMS,
 }

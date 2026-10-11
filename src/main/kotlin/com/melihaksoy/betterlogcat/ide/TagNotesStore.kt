@@ -48,10 +48,21 @@ class TagNotesStore {
         ),
     )
 
-    fun removeFromGroup(tag: String) = saveGroups(
-        groups = TagGroups.withoutTag(
+    fun groupTags(
+        tags: List<String>,
+        groupName: String,
+    ) = saveGroups(
+        groups = TagGroups.grouped(
             groups = _groups.value,
-            tag = tag,
+            tags = tags,
+            groupName = groupName,
+        ),
+    )
+
+    fun ungroupTags(tags: List<String>) = saveGroups(
+        groups = TagGroups.ungrouped(
+            groups = _groups.value,
+            tags = tags,
         ),
     )
 

@@ -17,6 +17,11 @@ class LogBuffer(capacity: Int) {
     private val all = ArrayList<LogEntry>()
     private val visible = ArrayList<LogEntry>()
     private var matcher: (LogEntry) -> Boolean = { true }
+
+    // Context lines (`context:N`): shown around matches, but not matches themselves.
+    private var contextLines = 0
+    private val contextIds = HashSet<Long>()
+    private var afterLeft = 0
     private val tagCounts = HashMap<String, Int>()
     private val tagPids = HashMap<String, MutableSet<Int>>()
 
@@ -70,7 +75,7 @@ class LogBuffer(capacity: Int) {
             val pids = tagPids.getOrPut(entry.tag) { HashSet() }
             if (pids.size < MAX_PIDS_PER_TAG) pids.add(entry.pid)
             countRate(entry = entry)
-            if (matcher(entry)) visible.add(entry)
+            admit(index = all.lastIndex)
         }
         trim()
     }
@@ -93,7 +98,7 @@ class LogBuffer(capacity: Int) {
             val wasVisible = visibleIndex < visible.size && visible[visibleIndex].id == merged.id
             val isVisible = matcher(merged)
             when {
-                wasVisible && isVisible -> visible[visibleIndex] = merged
+                wasVisible && (isVisible || merged.id in contextIds) -> visible[visibleIndex] = merged
                 wasVisible -> visible.removeAt(visibleIndex)
                 isVisible -> visible.add(visibleIndex, merged)
             }
@@ -112,10 +117,47 @@ class LogBuffer(capacity: Int) {
         return gapNanos in 0..MERGE_WINDOW_NANOS
     }
 
-    fun refilter(predicate: (LogEntry) -> Boolean) {
+    /** Filters every entry again. [context] lines before and after each match show too. */
+    fun refilter(
+        predicate: (LogEntry) -> Boolean,
+        context: Int = contextLines,
+    ) {
         matcher = predicate
+        contextLines = context
         visible.clear()
-        all.filterTo(destination = visible, predicate = predicate)
+        contextIds.clear()
+        afterLeft = 0
+        if (context == 0) {
+            all.filterTo(destination = visible, predicate = predicate)
+        } else {
+            for (index in all.indices) admit(index = index)
+        }
+    }
+
+    /** Ids of shown lines that are context, not matches. */
+    fun contextIdsSnapshot(): Set<Long> = if (contextIds.isEmpty()) emptySet() else HashSet(contextIds)
+
+    /** Shows `all[index]` when it matches, with the lines before it as context, or as context after a match. */
+    private fun admit(index: Int) {
+        val entry = all[index]
+        if (matcher(entry)) {
+            if (contextLines > 0) {
+                val lastShownId = visible.lastOrNull()?.id ?: Long.MIN_VALUE
+                for (before in (index - contextLines).coerceAtLeast(minimumValue = 0) until index) {
+                    val line = all[before]
+                    if (line.id > lastShownId) {
+                        visible.add(line)
+                        contextIds.add(line.id)
+                    }
+                }
+                afterLeft = contextLines
+            }
+            visible.add(entry)
+        } else if (afterLeft > 0) {
+            afterLeft--
+            visible.add(entry)
+            contextIds.add(entry.id)
+        }
     }
 
     /** Replaces every entry, then filters again. Use for changes that rewrite messages, like retrace. */
@@ -155,6 +197,8 @@ class LogBuffer(capacity: Int) {
     fun clear() {
         all.clear()
         visible.clear()
+        contextIds.clear()
+        afterLeft = 0
         tagCounts.clear()
         tagPids.clear()
         rateStamps.clear()
@@ -181,6 +225,7 @@ class LogBuffer(capacity: Int) {
         dropped.clear()
         val visibleDrop = firstIndexAtLeast(id = firstKeptId)
         visible.subList(0, visibleDrop).clear()
+        if (contextIds.isNotEmpty()) contextIds.removeIf { it < firstKeptId }
     }
 
     private fun firstIndexAtLeast(id: Long): Int {

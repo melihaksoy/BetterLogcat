@@ -15,22 +15,23 @@ class AdbLocator(private val project: Project) {
     private fun candidates(): Sequence<File> = sequence {
         val configured = BetterLogcatSettings.getInstance().state.adbPath.orEmpty().trim()
         if (configured.isNotEmpty()) yield(File(configured))
+        sdkRoots().forEach { yield(adbIn(sdk = it)) }
+        PathEnvironmentVariableUtil.findInPath(executableName())?.let { yield(it) }
+    }
 
-        localPropertiesSdk()?.let { yield(adbIn(sdk = it)) }
-
+    /** Android SDK folders that may exist: project local.properties, env vars, then the default folder. */
+    fun sdkRoots(): List<File> = buildList {
+        localPropertiesSdk()?.let { add(it) }
         listOf("ANDROID_HOME", "ANDROID_SDK_ROOT")
             .mapNotNull { System.getenv(it) }
             .filter { it.isNotBlank() }
-            .forEach { yield(adbIn(sdk = File(it))) }
-
+            .forEach { add(File(it)) }
         val home = System.getProperty("user.home")
         when {
-            SystemInfo.isMac -> yield(adbIn(sdk = File(home, "Library/Android/sdk")))
-            SystemInfo.isWindows -> System.getenv("LOCALAPPDATA")?.let { yield(adbIn(sdk = File(it, "Android/Sdk"))) }
-            else -> yield(adbIn(sdk = File(home, "Android/Sdk")))
+            SystemInfo.isMac -> add(File(home, "Library/Android/sdk"))
+            SystemInfo.isWindows -> System.getenv("LOCALAPPDATA")?.let { add(File(it, "Android/Sdk")) }
+            else -> add(File(home, "Android/Sdk"))
         }
-
-        PathEnvironmentVariableUtil.findInPath(executableName())?.let { yield(it) }
     }
 
     private fun localPropertiesSdk(): File? {

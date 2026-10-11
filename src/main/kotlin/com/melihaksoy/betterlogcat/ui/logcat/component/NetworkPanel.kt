@@ -60,6 +60,7 @@ internal fun NetworkPanel(
     detail: NetworkDetailUiModel? = null,
     detailHeight: Int = 320,
     colors: LogColors,
+    keywords: KeywordHighlighter = KeywordHighlighter.None,
     onOpenInEditor: (LogEntry) -> Unit = {},
     onIntent: (LogcatIntent) -> Unit,
 ) {
@@ -159,6 +160,7 @@ internal fun NetworkPanel(
                     .height(liveHeight.dp),
                 detail = detail,
                 colors = colors,
+                keywords = keywords,
                 onOpenInEditor = onOpenInEditor,
                 onIntent = onIntent,
             )

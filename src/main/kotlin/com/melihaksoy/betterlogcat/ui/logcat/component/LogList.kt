@@ -41,6 +41,7 @@ import com.intellij.ide.BrowserUtil
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -101,6 +102,7 @@ private const val DOUBLE_CLICK_MILLIS = 400L
 private val MENU_OFFSET = Offset(x = 4f, y = 4f)
 private val MIN_MESSAGE_WIDTH = 260.dp
 private const val PAGE_ROWS = 20
+private const val CONTEXT_ALPHA = 0.5f
 
 /**
  * The log table. Mouse: click selects, Shift extends, Cmd/Ctrl toggles, drag selects a block,
@@ -506,10 +508,12 @@ internal fun LogList(
                         } else if (ref.chunk == 0) {
                             val gutter = GutterUiModel(
                                 isBookmarked = entry.id in state.bookmarkedIds,
-                                isCrash = entry.isCrash,
+                                problem = entry.problem,
                                 call = callsByEntry[entry.id],
                             )
                             LogRow(
+                                // A context line (`context:N`) is there to read around a match, so it draws faint.
+                                modifier = Modifier.alpha(alpha = if (entry.id in state.contextIds) CONTEXT_ALPHA else 1f),
                                 gutter = gutter,
                                 tagDescription = TagDescriptions.describe(
                                     tag = entry.tag,

@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
+import com.melihaksoy.betterlogcat.model.ProblemKind
 import com.melihaksoy.betterlogcat.network.NetworkCall
 import com.melihaksoy.betterlogcat.ui.theme.BetterLogcatPreviewTheme
 import org.jetbrains.compose.ui.tooling.preview.Preview
@@ -34,16 +35,22 @@ private val GUTTER_HIT_HEIGHT = 14.dp
 /** Gutter plus expand chevron: where the columns start. */
 internal val LEADING_SLOT = GUTTER + EXPAND_SLOT
 
-/** What a row's gutter shows. [call] is the network call this entry is part of, when it is one. */
+/**
+ * What a row's gutter shows. [problem] is the crash, exception or warning in the row, and [call] the
+ * network call this entry is part of, when there is one.
+ */
 @Immutable
 data class GutterUiModel(
     val isBookmarked: Boolean = false,
-    val isCrash: Boolean = false,
+    val problem: ProblemKind? = null,
     val call: NetworkCall? = null,
 ) {
-    /** Crash and network rows open a menu; other rows toggle a bookmark. */
+    val isCrash: Boolean
+        get() = problem == ProblemKind.CRASH
+
+    /** Problem and network rows open a menu; other rows toggle a bookmark. */
     val hasMenu: Boolean
-        get() = isCrash || call != null
+        get() = problem != null || call != null
 
     companion object {
         val None = GutterUiModel()
@@ -51,8 +58,9 @@ data class GutterUiModel(
 }
 
 /**
- * Left gutter: a crash, network or bookmark icon. On hover an empty gutter shows a faint bookmark,
- * so it is clear that a click bookmarks the row.
+ * Left gutter: a crash, ANR, exception, StrictMode, network, bookmark or warning icon, in that order. A bookmark
+ * shows over a warning, as warnings are many and the user set the bookmark. On hover an empty gutter
+ * shows a faint bookmark, so it is clear that a click bookmarks the row.
  */
 @Composable
 internal fun Gutter(
@@ -78,23 +86,39 @@ internal fun Gutter(
             ),
         contentAlignment = Alignment.CenterStart,
     ) {
+        val problem = gutter.problem
         val key = when {
-            gutter.isCrash -> AllIconsKeys.General.Error
+            problem != null && problem != ProblemKind.WARNING -> problemIcon(kind = problem)
             gutter.call != null -> AllIconsKeys.General.Web
             gutter.isBookmarked -> AllIconsKeys.Nodes.Bookmark
+            problem != null -> problemIcon(kind = problem)
             isHovered -> AllIconsKeys.Nodes.Bookmark
             else -> null
+        }
+        val description = when {
+            problem != null && problem != ProblemKind.WARNING -> problemDescriptionKey(kind = problem)
+            gutter.isBookmarked -> "gutter.bookmarked"
+            problem != null -> problemDescriptionKey(kind = problem)
+            else -> "gutter.bookmark"
         }
         if (key != null) {
             Icon(
                 key = key,
-                contentDescription = BetterLogcatBundle.message(if (gutter.isBookmarked) "gutter.bookmarked" else "gutter.bookmark"),
+                contentDescription = BetterLogcatBundle.message(description),
                 modifier = Modifier
                     .size(14.dp)
                     .alpha(alpha = if (isHovered && !gutter.isBookmarked && !gutter.hasMenu) 0.45f else 1f),
             )
         }
     }
+}
+
+private fun problemDescriptionKey(kind: ProblemKind): String = when (kind) {
+    ProblemKind.CRASH -> "gutter.crash"
+    ProblemKind.ANR -> "gutter.anr"
+    ProblemKind.EXCEPTION -> "gutter.exception"
+    ProblemKind.STRICT_MODE -> "gutter.strictMode"
+    ProblemKind.WARNING -> "gutter.warning"
 }
 
 // region Previews
@@ -104,7 +128,29 @@ internal fun Gutter(
 private fun PreviewGutterCrash() {
     BetterLogcatPreviewTheme {
         Gutter(
-            gutter = GutterUiModel(isCrash = true),
+            gutter = GutterUiModel(problem = ProblemKind.CRASH),
+            onClick = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewGutterException() {
+    BetterLogcatPreviewTheme {
+        Gutter(
+            gutter = GutterUiModel(problem = ProblemKind.EXCEPTION),
+            onClick = {},
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewGutterWarning() {
+    BetterLogcatPreviewTheme {
+        Gutter(
+            gutter = GutterUiModel(problem = ProblemKind.WARNING),
             onClick = {},
         )
     }

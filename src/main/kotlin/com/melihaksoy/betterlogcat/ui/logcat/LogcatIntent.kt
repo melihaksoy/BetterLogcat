@@ -88,7 +88,12 @@ sealed interface LogcatIntent {
         val tag: String,
         val groupName: String,
     ) : LogcatIntent
-    data class RemoveTagFromGroup(val tag: String) : LogcatIntent
+    /** Tags dragged together in the Tags panel: all go in the group [groupName], new or not. */
+    data class GroupTags(
+        val tags: List<String>,
+        val groupName: String,
+    ) : LogcatIntent
+    data class UngroupTags(val tags: List<String>) : LogcatIntent
     data class RenameTagGroup(
         val from: String,
         val to: String,
@@ -150,4 +155,32 @@ sealed interface LogcatIntent {
     data object ChooseMapping : LogcatIntent
     data class LoadMapping(val file: File) : LogcatIntent
     data object RemoveMapping : LogcatIntent
+
+    /** Goes to a line of a problem: [back] 0 is the newest line, 1 the one before, and so on. */
+    data class JumpToProblem(
+        val sessionId: String,
+        val key: String,
+        val back: Int,
+    ) : LogcatIntent
+    data class DeleteProblem(
+        val sessionId: String,
+        val key: String,
+    ) : LogcatIntent
+    data class DeleteProblemSession(val id: String) : LogcatIntent
+    data class RenameProblemSession(
+        val id: String,
+        val title: String,
+    ) : LogcatIntent
+
+    /** Deletes saved sessions that started before [epochMillis]. The live session stays. */
+    data class DeleteProblemHistoryBefore(val epochMillis: Long) : LogcatIntent
+    data class IgnoreProblem(val key: String) : LogcatIntent
+    data object ResetIgnoredProblems : LogcatIntent
+
+    /** Shows a saved log file in this pane instead of the device stream. */
+    data class OpenLogFile(val file: File) : LogcatIntent
+    data object CloseLogFile : LogcatIntent
+
+    /** Collects the native backtrace after a "Fatal signal" line, for symbolizing. */
+    data class SymbolizeNativeCrash(val id: Long) : LogcatIntent
 }

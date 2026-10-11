@@ -38,10 +38,46 @@ class TagGroupTest {
     }
 
     @Test
-    fun `removing the last tag keeps the empty group`() {
+    fun `removing the last tag removes the group`() {
         val groups = TagGroups.withoutTag(groups = listOf(TagGroup(name = "Noise", tags = listOf("art"))), tag = "art")
 
-        assertEquals(listOf(TagGroup(name = "Noise", tags = emptyList())), groups)
+        assertEquals(emptyList<TagGroup>(), groups)
+    }
+
+    @Test
+    fun `moving the last tag out removes its old group`() {
+        val groups = listOf(TagGroup(name = "Noise", tags = listOf("art")), TagGroup(name = "Ads", tags = listOf("Adjust")))
+
+        val moved = TagGroups.withTag(groups = groups, tag = "art", groupName = "Ads")
+
+        assertEquals(listOf(TagGroup(name = "Ads", tags = listOf("Adjust", "art"))), moved)
+    }
+
+    @Test
+    fun `grouping takes the tags out of their groups into a new one`() {
+        val groups = TagGroups.grouped(groups = listOf(snowplow), tags = listOf("art", "SnowplowEmitter"), groupName = "Group 1")
+
+        assertEquals(
+            listOf(TagGroup(name = "Snowplow", tags = listOf("SnowplowTracker")), TagGroup(name = "Group 1", tags = listOf("art", "SnowplowEmitter"))),
+            groups,
+        )
+    }
+
+    @Test
+    fun `ungrouping takes each tag out and drops groups left empty`() {
+        val groups = listOf(snowplow, TagGroup(name = "Noise", tags = listOf("art")))
+
+        val ungrouped = TagGroups.ungrouped(groups = groups, tags = listOf("art", "SnowplowEmitter", "Adjust"))
+
+        assertEquals(listOf(TagGroup(name = "Snowplow", tags = listOf("SnowplowTracker"))), ungrouped)
+    }
+
+    @Test
+    fun `next name skips taken default names`() {
+        val groups = listOf(TagGroup(name = "Group 1", tags = listOf("art")), TagGroup(name = "Group 3", tags = listOf("adbd")))
+
+        assertEquals("Group 2", TagGroups.nextName(groups = groups) { "Group $it" })
+        assertEquals("Group 1", TagGroups.nextName(groups = emptyList()) { "Group $it" })
     }
 
     @Test

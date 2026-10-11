@@ -3,6 +3,7 @@ package com.melihaksoy.betterlogcat.filter
 import com.melihaksoy.betterlogcat.model.JsonContent
 import com.melihaksoy.betterlogcat.model.LogEntry
 import com.melihaksoy.betterlogcat.model.LogLevel
+import com.melihaksoy.betterlogcat.model.ProblemKind
 import java.util.regex.PatternSyntaxException
 
 /** A [LogFilter] compiled once, then applied to many entries. */
@@ -16,12 +17,20 @@ class LogFilterMatcher(
     private val running: LogFilter = filter.effective()
 
     private val regex: Regex? = compileRegex()
-    private val compiledTerms = running.terms.filter { it.key != QueryKey.NAME }.map { CompiledTerm(term = it) }
+    private val compiledTerms = running.terms.filter { it.key != QueryKey.NAME && it.key != QueryKey.CONTEXT }.map { CompiledTerm(term = it) }
+
+    /** Lines to show before and after each match, from `context:N`. 0 when not set. */
+    val contextLines: Int = running.terms
+        .filter { it.key == QueryKey.CONTEXT && !it.isNegated }
+        .mapNotNull { it.value.toIntOrNull()?.coerceIn(minimumValue = 0, maximumValue = MAX_CONTEXT) }
+        .maxOrNull() ?: 0
     private val positiveByKey = compiledTerms.filter { !it.term.isNegated }.groupBy { it.term.key }
     private val negatives = compiledTerms.filter { it.term.isNegated }
 
     /** False when the free-text regex or a `~:` term does not compile. Those parts are ignored. */
-    val isQueryValid: Boolean = (!running.isRegex || running.query.isEmpty() || regex != null) && compiledTerms.all { it.isValid }
+    val isQueryValid: Boolean = (!running.isRegex || running.query.isEmpty() || regex != null) &&
+        compiledTerms.all { it.isValid } &&
+        running.terms.filter { it.key == QueryKey.CONTEXT }.all { it.value.toIntOrNull() != null }
 
     private val positiveTagTerms = positiveByKey[QueryKey.TAG].orEmpty()
     private val negativeTagTerms = negatives.filter { it.term.key == QueryKey.TAG }
@@ -116,7 +125,7 @@ class LogFilterMatcher(
                 QueryKey.TAG -> matchesText(text = entry.tag)
                 QueryKey.MESSAGE -> matchesText(text = entry.message)
                 QueryKey.LINE -> matchesText(text = "${processNames[entry.pid].orEmpty()} ${entry.level.letter} ${entry.tag}: ${entry.message}")
-                QueryKey.NAME -> true
+                QueryKey.NAME, QueryKey.CONTEXT -> true
                 QueryKey.PROCESS -> matchesText(text = processNames[entry.pid].orEmpty())
                 QueryKey.PID -> term.value.toIntOrNull() == entry.pid
                 QueryKey.LEVEL -> level != null && entry.level >= level
@@ -148,6 +157,10 @@ class LogFilterMatcher(
 
         private fun matchesIs(entry: LogEntry): Boolean = when (term.value.lowercase()) {
             "crash" -> entry.isCrash
+            "anr" -> entry.problem == ProblemKind.ANR
+            "exception" -> entry.problem == ProblemKind.EXCEPTION
+            "strictmode" -> entry.problem == ProblemKind.STRICT_MODE
+            "problem" -> entry.problem != null
             "stacktrace" -> entry.hasStackFrames
             "json" -> entry.json is JsonContent.Found
             else -> false
@@ -156,6 +169,7 @@ class LogFilterMatcher(
 
     private companion object {
         const val MAX_HIGHLIGHTS = 64
+        const val MAX_CONTEXT = 50
         val ageRegex = Regex(pattern = """(\d+)([smhd])""")
 
         fun parseLevel(value: String): LogLevel? = LogLevel.entries.firstOrNull {

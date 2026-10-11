@@ -47,6 +47,31 @@ class BetterLogcatConfigurable : BoundConfigurable(BetterLogcatBundle.message("s
                             setter = { state.clearDeviceBuffer = it },
                         )
                 }
+                row {
+                    checkBox(BetterLogcatBundle.message("settings.clearOnAppLaunch"))
+                        .bindSelected(
+                            getter = { state.clearOnAppLaunch },
+                            setter = { state.clearOnAppLaunch = it },
+                        )
+                        .comment(BetterLogcatBundle.message("settings.clearOnAppLaunch.comment"))
+                }
+            }
+            group(BetterLogcatBundle.message("settings.group.problems")) {
+                row {
+                    checkBox(BetterLogcatBundle.message("settings.notifyOnCrash"))
+                        .bindSelected(
+                            getter = { state.notifyOnCrash },
+                            setter = { state.notifyOnCrash = it },
+                        )
+                }
+                row(BetterLogcatBundle.message("settings.problemHistoryDays")) {
+                    intTextField(range = 1..365)
+                        .bindIntText(
+                            getter = { state.problemHistoryDays },
+                            setter = { state.problemHistoryDays = it },
+                        )
+                        .comment(BetterLogcatBundle.message("settings.problemHistoryDays.comment"))
+                }
             }
             group(BetterLogcatBundle.message("settings.group.bookmarks")) {
                 row {

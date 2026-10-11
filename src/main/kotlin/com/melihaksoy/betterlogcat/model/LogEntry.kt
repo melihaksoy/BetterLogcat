@@ -27,9 +27,17 @@ class LogEntry(
         StackFrameParser.containsFrame(text = message)
     }
 
-    /** An app crash: an assert, or AndroidRuntime's FATAL EXCEPTION. */
+    /** An app crash: an assert, AndroidRuntime's FATAL EXCEPTION, or libc's native "Fatal signal". */
     val isCrash: Boolean
-        get() = level == LogLevel.ASSERT || (level == LogLevel.ERROR && tag == "AndroidRuntime" && message.startsWith("FATAL EXCEPTION"))
+        get() = level == LogLevel.ASSERT ||
+            (level == LogLevel.ERROR && tag == "AndroidRuntime" && message.startsWith("FATAL EXCEPTION")) ||
+            LogProblems.isNativeCrash(tag = tag, message = message)
+
+    /** The first throwable class the message names, or null. See [LogProblems.exceptionName]. */
+    val exceptionName: String? by lazy(LazyThreadSafetyMode.PUBLICATION) { LogProblems.exceptionName(message = message) }
+
+    /** Crash, exception or warning, for the gutter and the Problems panel. Null for other lines. */
+    val problem: ProblemKind? by lazy(LazyThreadSafetyMode.PUBLICATION) { LogProblems.kindOf(entry = this) }
 
     /** App process start or end, when this is one of ActivityManager's lines about it. Null otherwise. */
     val processEvent: ProcessEvent? by lazy(LazyThreadSafetyMode.PUBLICATION) {

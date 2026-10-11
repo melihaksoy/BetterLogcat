@@ -20,12 +20,20 @@ import kotlinx.coroutines.flow.update
 
 /**
  * Bookmarked lines of one project, shared by every pane. With "keep bookmarks" on (the default) they
- * are saved in the IDE cache folder, not in the project, and survive Clear and a restart.
+ * are saved in the project's workspace file (`.idea/workspace.xml`, personal, not shared), so they
+ * survive Clear, a restart, Invalidate Caches and IDE updates. Older versions saved them in the IDE
+ * cache folder; that storage is read once and then left empty.
  */
 @Service(Service.Level.PROJECT)
 @State(
     name = "BetterLogcatBookmarks",
-    storages = [Storage(StoragePathMacros.CACHE_FILE)],
+    storages = [
+        Storage(StoragePathMacros.WORKSPACE_FILE),
+        Storage(
+            value = StoragePathMacros.CACHE_FILE,
+            deprecated = true,
+        ),
+    ],
 )
 class BookmarkStore : PersistentStateComponent<BookmarkStore.BookmarksState> {
 
@@ -92,8 +100,8 @@ class BookmarkStore : PersistentStateComponent<BookmarkStore.BookmarksState> {
     companion object {
         const val MAX_BOOKMARKS = 1_000
 
-        /** Longer messages are cut before they are saved, so the cache file stays small. */
-        const val MAX_SAVED_MESSAGE = 512 * 1_024
+        /** Longer messages are cut before they are saved, so the workspace file stays small. */
+        const val MAX_SAVED_MESSAGE = 64 * 1_024
 
         private val LOG_ORDER = compareBy<Bookmark>({ it.key.epochSeconds }, { it.key.nanos })
 

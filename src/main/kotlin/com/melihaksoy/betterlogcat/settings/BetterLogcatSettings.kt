@@ -22,8 +22,17 @@ class BetterLogcatSettings : SimplePersistentStateComponent<BetterLogcatSettings
         var loadExistingBuffer by property(defaultValue = true)
         var clearDeviceBuffer by property(defaultValue = true)
 
-        /** Saves bookmarked lines in the IDE cache, so Clear and a restart keep them. */
+        /** Saves bookmarked lines in the workspace file, so Clear and a restart keep them. */
         var keepBookmarks by property(defaultValue = true)
+
+        /** When the project app starts, the log starts over with it. */
+        var clearOnAppLaunch by property(defaultValue = false)
+
+        /** A crash or ANR shows an IDE notification while the tool window is hidden. */
+        var notifyOnCrash by property(defaultValue = true)
+
+        /** Problem sessions older than this are deleted when the project opens. */
+        var problemHistoryDays by property(defaultValue = 30)
 
         var softWrap by property(defaultValue = true)
         var compactRows by property(defaultValue = false)
@@ -34,6 +43,7 @@ class BetterLogcatSettings : SimplePersistentStateComponent<BetterLogcatSettings
         var tagsPanelWidth by property(defaultValue = 280)
         var networkPanelWidth by property(defaultValue = 460)
         var bookmarksPanelWidth by property(defaultValue = 360)
+        var problemsPanelWidth by property(defaultValue = 380)
         var networkDetailHeight by property(defaultValue = 320)
         var includeThreadId by property(defaultValue = true)
         var showRepeatedTags by property(defaultValue = true)

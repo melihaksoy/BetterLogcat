@@ -53,11 +53,48 @@ object TagGroups {
         }
     }
 
-    /** Takes [tag] out of its group. A group with no tags left stays, so a cleared log does not lose it. */
+    /** Puts [tags] together in a new group [groupName], out of any other group. */
+    fun grouped(
+        groups: List<TagGroup>,
+        tags: List<String>,
+        groupName: String,
+    ): List<TagGroup> = tags.fold(initial = groups) { current, tag ->
+        withTag(
+            groups = current,
+            tag = tag,
+            groupName = groupName,
+        )
+    }
+
+    /**
+     * Takes [tag] out of its group. A group with no tags left goes away. Clearing the log never
+     * calls this, so groups whose tags are not in the log now stay.
+     */
     fun withoutTag(
         groups: List<TagGroup>,
         tag: String,
-    ): List<TagGroup> = groups.map { group -> if (tag in group.tags) group.copy(tags = group.tags - tag) else group }
+    ): List<TagGroup> = groups
+        .map { group -> if (tag in group.tags) group.copy(tags = group.tags - tag) else group }
+        .filter { it.tags.isNotEmpty() }
+
+    /** Takes each of [tags] out of its group. */
+    fun ungrouped(
+        groups: List<TagGroup>,
+        tags: List<String>,
+    ): List<TagGroup> = tags.fold(initial = groups) { current, tag ->
+        withoutTag(
+            groups = current,
+            tag = tag,
+        )
+    }
+
+    /** The first free default name: [nameFor] 1, then 2, and so on. */
+    fun nextName(
+        groups: List<TagGroup>,
+        nameFor: (Int) -> String,
+    ): String = generateSequence(seed = 1) { it + 1 }
+        .map(nameFor)
+        .first { name -> groups.none { it.name == name } }
 
     /** Renames a group. A blank name or the name of another group changes nothing. */
     fun renamed(

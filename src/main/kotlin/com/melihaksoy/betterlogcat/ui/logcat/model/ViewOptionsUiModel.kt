@@ -18,6 +18,7 @@ data class ViewOptionsUiModel(
     val tagsPanelWidth: Int = 280,
     val networkPanelWidth: Int = 460,
     val bookmarksPanelWidth: Int = 360,
+    val problemsPanelWidth: Int = 380,
     /** Height of the request/response details in the network panel. */
     val networkDetailHeight: Int = 320,
     val includeThreadId: Boolean = true,

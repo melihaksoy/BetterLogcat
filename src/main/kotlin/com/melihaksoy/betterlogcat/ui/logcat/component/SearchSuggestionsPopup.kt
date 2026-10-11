@@ -170,6 +170,7 @@ internal fun keyDescription(key: QueryKey): String = when (key) {
     QueryKey.PROCESS -> BetterLogcatBundle.message("search.key.process")
     QueryKey.PID -> BetterLogcatBundle.message("search.key.pid")
     QueryKey.AGE -> BetterLogcatBundle.message("search.key.age")
+    QueryKey.CONTEXT -> BetterLogcatBundle.message("search.key.context")
     QueryKey.IS -> BetterLogcatBundle.message("search.key.is")
     QueryKey.LINE -> BetterLogcatBundle.message("search.key.line")
     QueryKey.NAME -> BetterLogcatBundle.message("search.key.name")

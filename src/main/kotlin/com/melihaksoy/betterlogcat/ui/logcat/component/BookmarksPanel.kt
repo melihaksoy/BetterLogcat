@@ -27,7 +27,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
@@ -60,6 +63,7 @@ internal fun BookmarksPanel(
     modifier: Modifier = Modifier,
     bookmarks: List<BookmarkUiModel>,
     colors: LogColors,
+    keywords: KeywordHighlighter = KeywordHighlighter.None,
     onOpenInEditor: (LogEntry) -> Unit,
     onIntent: (LogcatIntent) -> Unit,
 ) {
@@ -131,6 +135,7 @@ internal fun BookmarksPanel(
                         BookmarkRow(
                             row = row,
                             colors = colors,
+                            keywords = keywords,
                             onClick = {
                                 if (row.isInLog) {
                                     onIntent(LogcatIntent.JumpToEntry(id = row.liveId))
@@ -158,6 +163,7 @@ internal fun BookmarksPanel(
 private fun BookmarkRow(
     row: BookmarkUiModel,
     colors: LogColors,
+    keywords: KeywordHighlighter,
     onClick: () -> Unit,
     onOpenInEditor: () -> Unit,
     onRemove: () -> Unit,
@@ -166,6 +172,18 @@ private fun BookmarkRow(
     val isHovered by interactionSource.collectIsHoveredAsState()
     val bookmark = row.bookmark
     val entry = remember(bookmark) { bookmark.toLogEntry(id = row.liveId) }
+    val textColor = JewelTheme.globalColors.text.normal
+    val message = remember(bookmark, keywords, textColor) {
+        val line = bookmark.message.lineSequence().firstOrNull().orEmpty()
+        buildAnnotatedString {
+            withStyle(style = SpanStyle(color = textColor)) { append(line) }
+            keywords.apply(
+                builder = this,
+                text = line,
+                offset = 0,
+            )
+        }
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -227,7 +245,7 @@ private fun BookmarkRow(
                 }
             }
             Text(
-                text = bookmark.message.lineSequence().firstOrNull().orEmpty(),
+                text = message,
                 style = JewelTheme.editorTextStyle,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,

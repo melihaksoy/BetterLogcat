@@ -41,7 +41,8 @@ object QuerySuggestions {
 
     private const val MAX_ITEMS = 12
     private val ageValues = listOf("30s", "1m", "5m", "15m", "1h", "1d")
-    private val isValues = listOf("crash", "stacktrace", "json")
+    private val isValues = listOf("crash", "anr", "exception", "strictmode", "problem", "stacktrace", "json")
+    private val contextValues = listOf("1", "3", "5", "10")
 
     fun suggest(
         text: String,
@@ -116,6 +117,7 @@ object QuerySuggestions {
             QueryKey.LEVEL -> LogLevel.entries.map { it.name.lowercase() }
             QueryKey.IS -> isValues
             QueryKey.AGE -> ageValues
+            QueryKey.CONTEXT -> contextValues
             QueryKey.PROCESS -> context.processNames
             QueryKey.MESSAGE, QueryKey.PID, QueryKey.LINE, QueryKey.NAME -> emptyList()
         }

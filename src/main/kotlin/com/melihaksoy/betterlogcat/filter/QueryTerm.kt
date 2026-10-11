@@ -5,6 +5,9 @@ import androidx.compose.runtime.Immutable
 /** Keys of `key:value` search terms, as in Android Studio's Logcat. Alphabetical, for the suggestion list. */
 enum class QueryKey(val token: String) {
     AGE(token = "age"),
+
+    /** Shows this many lines around each match, like `grep -C`. Does not filter. */
+    CONTEXT(token = "context"),
     IS(token = "is"),
     LEVEL(token = "level"),
     LINE(token = "line"),

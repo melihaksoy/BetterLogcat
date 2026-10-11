@@ -35,10 +35,13 @@ import com.melihaksoy.betterlogcat.filter.SuggestionContext
 import com.melihaksoy.betterlogcat.ui.logcat.component.EmptyState
 import com.melihaksoy.betterlogcat.ui.logcat.component.BookmarksPanel
 import com.melihaksoy.betterlogcat.ui.logcat.component.FilterBar
+import com.melihaksoy.betterlogcat.ui.logcat.component.KeywordHighlighter
 import com.melihaksoy.betterlogcat.ui.logcat.component.LogList
 import com.melihaksoy.betterlogcat.ui.logcat.component.LogToolbar
 import com.melihaksoy.betterlogcat.ui.logcat.component.PackageLabels
 import com.melihaksoy.betterlogcat.ui.logcat.component.NetworkPanel
+import com.melihaksoy.betterlogcat.ui.logcat.component.OpenedFileBar
+import com.melihaksoy.betterlogcat.ui.logcat.component.ProblemsPanel
 import com.melihaksoy.betterlogcat.ui.logcat.component.ResizeHandle
 import com.melihaksoy.betterlogcat.ui.logcat.component.TagsPanel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SidePanel
@@ -93,6 +96,16 @@ fun LogcatScreen(
                     project = project,
                     onIntent = viewModel::onIntent,
                 )
+                is LogcatEvent.OpenInEditor -> popups.openInEditor(entry = event.entry)
+                is LogcatEvent.AppCrashed -> popups.noticeCrash(
+                    entryId = event.entryId,
+                    kind = event.kind,
+                    title = event.title,
+                )
+                is LogcatEvent.SymbolizeBacktrace -> popups.symbolizeNativeCrash(
+                    crash = event.crash,
+                    backtrace = event.backtrace,
+                )
             }
         }
     }
@@ -136,6 +149,13 @@ internal fun LogcatContent(
                 processNames = state.processNames.values.distinct().sorted(),
             )
         }
+        if (state.openedFileName.isNotEmpty()) {
+            OpenedFileBar(
+                fileName = state.openedFileName,
+                colors = colors,
+                onBackToLive = { onIntent(LogcatIntent.CloseLogFile) },
+            )
+        }
         FilterBar(
             filter = state.filter,
             isQueryValid = state.isQueryValid,
@@ -169,6 +189,7 @@ internal fun LogcatContent(
                 val savedWidth = when (panel) {
                     SidePanel.TAGS -> state.viewOptions.tagsPanelWidth
                     SidePanel.BOOKMARKS -> state.viewOptions.bookmarksPanelWidth
+                    SidePanel.PROBLEMS -> state.viewOptions.problemsPanelWidth
                     else -> state.viewOptions.networkPanelWidth
                 }
                 // Live width while dragging; saved when the drag ends.
@@ -188,6 +209,8 @@ internal fun LogcatContent(
                 val panelModifier = Modifier
                     .fillMaxHeight()
                     .width(liveWidth.dp)
+                // The user's keyword highlights (presets too), so side panel text matches the log.
+                val keywords = remember(state.highlightRules) { KeywordHighlighter(rules = state.highlightRules) }
                 when (panel) {
                     SidePanel.NONE -> Unit
                     SidePanel.NETWORK -> NetworkPanel(
@@ -196,13 +219,24 @@ internal fun LogcatContent(
                         detail = state.networkDetail,
                         detailHeight = state.viewOptions.networkDetailHeight,
                         colors = colors,
+                        keywords = keywords,
                         onOpenInEditor = popups::openInEditor,
+                        onIntent = onIntent,
+                    )
+                    SidePanel.PROBLEMS -> ProblemsPanel(
+                        modifier = panelModifier,
+                        problems = state.problems,
+                        colors = colors,
+                        onProblemMenu = popups::showProblemMenu,
+                        onSessionMenu = popups::showProblemSessionMenu,
+                        onPanelMenu = popups::showProblemsPanelMenu,
                         onIntent = onIntent,
                     )
                     SidePanel.BOOKMARKS -> BookmarksPanel(
                         modifier = panelModifier,
                         bookmarks = state.bookmarks,
                         colors = colors,
+                        keywords = keywords,
                         onOpenInEditor = popups::openInEditor,
                         onIntent = onIntent,
                     )

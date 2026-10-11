@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
 import com.melihaksoy.betterlogcat.model.Device
@@ -31,7 +32,10 @@ import org.jetbrains.jewel.ui.component.Divider
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
 import java.awt.Point
 
-/** Top row: device and package pickers on the left, actions on the right. */
+/**
+ * Top row: device and package pickers on the left, actions on the right in groups split by
+ * dividers: log controls, side panels, expand and collapse, capture and export, settings, panes.
+ */
 @Composable
 internal fun LogToolbar(
     modifier: Modifier = Modifier,
@@ -111,6 +115,7 @@ internal fun LogToolbar(
                 )
             },
         )
+        ToolbarDivider()
         ToolbarToggleButton(
             iconKey = AllIconsKeys.General.Hashtag,
             tooltip = BetterLogcatBundle.message("toolbar.tags"),
@@ -124,11 +129,19 @@ internal fun LogToolbar(
             onToggle = { onIntent(LogcatIntent.ToggleSidePanel(panel = SidePanel.NETWORK)) },
         )
         ToolbarToggleButton(
-            iconKey = AllIconsKeys.Nodes.Bookmark,
+            // The outline tool window icon, like the other panel buttons; the filled one marks rows in the gutter.
+            iconKey = AllIconsKeys.Toolwindows.ToolWindowBookmarks,
             tooltip = BetterLogcatBundle.message("toolbar.bookmarks"),
             isSelected = state.viewOptions.sidePanel == SidePanel.BOOKMARKS,
             onToggle = { onIntent(LogcatIntent.ToggleSidePanel(panel = SidePanel.BOOKMARKS)) },
         )
+        ToolbarToggleButton(
+            iconKey = AllIconsKeys.Toolwindows.ToolWindowProblems,
+            tooltip = BetterLogcatBundle.message("toolbar.problems"),
+            isSelected = state.viewOptions.sidePanel == SidePanel.PROBLEMS,
+            onToggle = { onIntent(LogcatIntent.ToggleSidePanel(panel = SidePanel.PROBLEMS)) },
+        )
+        ToolbarDivider()
         ToolbarIconButton(
             iconKey = AllIconsKeys.Actions.Expandall,
             tooltip = BetterLogcatBundle.message("toolbar.expandAll"),
@@ -139,6 +152,7 @@ internal fun LogToolbar(
             tooltip = BetterLogcatBundle.message("toolbar.collapseAll"),
             onClick = { onIntent(LogcatIntent.CollapseAll) },
         )
+        ToolbarDivider()
         val isDeviceOnline = state.selectedDevice?.state == DeviceState.ONLINE
         ToolbarIconButton(
             iconKey = BetterLogcatIcons.Screenshot,
@@ -152,11 +166,15 @@ internal fun LogToolbar(
             isEnabled = isDeviceOnline,
             onClick = popups::recordScreen,
         )
+        val exportAnchor = rememberSwingAnchor()
+        val density = LocalDensity.current
         ToolbarIconButton(
+            modifier = Modifier.swingAnchor(anchor = exportAnchor),
             iconKey = AllIconsKeys.General.Export,
             tooltip = BetterLogcatBundle.message("toolbar.export"),
-            onClick = { onIntent(LogcatIntent.Export) },
+            onClick = { popups.showExportMenu(at = exportAnchor.bottomLeft(density = density)) },
         )
+        ToolbarDivider()
         ToolbarIconButton(
             iconKey = AllIconsKeys.General.Settings,
             tooltip = BetterLogcatBundle.message("toolbar.viewSettings"),

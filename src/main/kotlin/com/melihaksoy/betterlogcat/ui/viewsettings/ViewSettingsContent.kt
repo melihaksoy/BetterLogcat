@@ -41,6 +41,7 @@ import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.CheckboxRow
 import org.jetbrains.jewel.ui.component.GroupHeader
 import org.jetbrains.jewel.ui.component.Link
+import org.jetbrains.jewel.ui.component.OutlinedButton
 import org.jetbrains.jewel.ui.component.RadioButtonRow
 import org.jetbrains.jewel.ui.component.Text
 
@@ -113,6 +114,11 @@ internal fun ViewSettingsContent(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(space = 4.dp),
             ) {
+                // First in its column: these settings live in the IDE settings page, so they need a clear way there.
+                IdeSettingsSection(
+                    colors = colors,
+                    onOpenIdeSettings = onOpenIdeSettings,
+                )
                 ProcessSection(
                     viewOptions = viewOptions,
                     onIntent = onIntent,
@@ -140,19 +146,29 @@ internal fun ViewSettingsContent(
             colors = colors,
             keywords = keywords,
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+        Text(
+            text = BetterLogcatBundle.message("viewPanel.hint"),
+            color = colors.muted,
+        )
+    }
+}
+
+/** Buffer, adb and problem settings are in Settings › Tools › Better Logcat: what is there, and a button to open it. */
+@Composable
+private fun IdeSettingsSection(
+    colors: LogColors,
+    onOpenIdeSettings: () -> Unit,
+) {
+    Section(title = BetterLogcatBundle.message("viewPanel.ideSettings.title")) {
+        Text(
+            text = BetterLogcatBundle.message("viewPanel.ideSettings.summary"),
+            color = colors.muted,
+        )
+        OutlinedButton(
+            modifier = Modifier.padding(top = 4.dp),
+            onClick = onOpenIdeSettings,
         ) {
-            Text(
-                text = BetterLogcatBundle.message("viewPanel.hint"),
-                color = colors.muted,
-            )
-            Link(
-                text = BetterLogcatBundle.message("viewPanel.ideSettings"),
-                onClick = onOpenIdeSettings,
-            )
+            Text(text = BetterLogcatBundle.message("viewPanel.ideSettings"))
         }
     }
 }

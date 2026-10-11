@@ -21,11 +21,13 @@ import com.melihaksoy.betterlogcat.filter.QueryTerm
 import com.melihaksoy.betterlogcat.filter.TagVisibility
 import com.melihaksoy.betterlogcat.format.CopyMode
 import com.melihaksoy.betterlogcat.format.LogCopyFormatter
+import com.melihaksoy.betterlogcat.format.LogFileParser
 import com.melihaksoy.betterlogcat.format.StackFrame
 import com.melihaksoy.betterlogcat.format.StackRetracer
 import com.melihaksoy.betterlogcat.ide.AppearanceStore
 import com.melihaksoy.betterlogcat.ide.BookmarkStore
 import com.melihaksoy.betterlogcat.ide.PackageAliasStore
+import com.melihaksoy.betterlogcat.ide.ProblemHistoryStore
 import com.melihaksoy.betterlogcat.ide.SourceNavigator
 import com.melihaksoy.betterlogcat.model.Bookmark
 import com.melihaksoy.betterlogcat.model.BookmarkKey
@@ -34,6 +36,12 @@ import com.melihaksoy.betterlogcat.model.DeviceState
 import com.melihaksoy.betterlogcat.model.LogColumn
 import com.melihaksoy.betterlogcat.model.LogEntry
 import com.melihaksoy.betterlogcat.model.LogLevel
+import com.melihaksoy.betterlogcat.model.ProblemDescriptions
+import com.melihaksoy.betterlogcat.model.ProblemHistory
+import com.melihaksoy.betterlogcat.model.ProblemKind
+import com.melihaksoy.betterlogcat.model.ProblemRecorder
+import com.melihaksoy.betterlogcat.model.ProblemSession
+import com.melihaksoy.betterlogcat.model.ProcessEvent
 import com.melihaksoy.betterlogcat.model.TimeFormat
 import com.melihaksoy.betterlogcat.network.NetworkCall
 import com.melihaksoy.betterlogcat.network.NetworkTracker
@@ -41,6 +49,7 @@ import com.melihaksoy.betterlogcat.settings.BetterLogcatSettings
 import com.melihaksoy.betterlogcat.ui.logcat.model.BookmarkUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.LogcatContentUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.NetworkDetailUiModel
+import com.melihaksoy.betterlogcat.ui.logcat.model.ProblemsUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SavedFiltersUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SelectionUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SidePanel
@@ -75,6 +84,7 @@ import java.awt.datatransfer.StringSelection
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import com.melihaksoy.betterlogcat.ide.TagNotesStore
@@ -96,6 +106,7 @@ class LogcatViewModel(
     private val appearanceStore: AppearanceStore,
     private val bookmarkStore: BookmarkStore,
     private val tagNotesStore: TagNotesStore,
+    private val problemHistoryStore: ProblemHistoryStore,
 ) {
     private val _state = MutableStateFlow(value = initialState())
     val state: StateFlow<LogcatState> = _state.asStateFlow()
@@ -130,6 +141,24 @@ class LogcatViewModel(
     private val networkTracker = NetworkTracker()
     private var isNetworkDirty = false
     private var lastRatesPublish = 0L
+
+    /** Problems of this pane's live session. Buffer thread only, like the buffer. */
+    private val recorder = ProblemRecorder()
+    private var session = ProblemSession(
+        id = UUID.randomUUID().toString(),
+        title = "",
+        startedEpochMillis = System.currentTimeMillis(),
+        problems = emptyList(),
+    )
+
+    /** Lines up to this time are already in a saved session of the device (a replayed device log). */
+    private var sessionSkipUntil = Long.MIN_VALUE
+    private var savedSessions: List<ProblemSession> = emptyList()
+    private var ignoredProblems: Set<String> = emptySet()
+    private var lastProblemsPublish = 0L
+    private var lastHistorySave = 0L
+    private var isHistoryDirty = false
+    private var lastCrashNotice = 0L
 
     /** The project's bookmarks, and the id of each one's line in this buffer. Buffer thread only. */
     private var bookmarks: List<Bookmark> = emptyList()
@@ -174,6 +203,18 @@ class LogcatViewModel(
         bookmarkStore.bookmarks
             .onEach(::onBookmarksChanged)
             .launchIn(scope = workScope)
+        problemHistoryStore.sessions
+            .onEach { sessions ->
+                savedSessions = sessions
+                publishProblems()
+            }
+            .launchIn(scope = workScope)
+        problemHistoryStore.ignoredKeys
+            .onEach { keys ->
+                ignoredProblems = keys
+                publishProblems()
+            }
+            .launchIn(scope = workScope)
         observeProjectAppIds()
             .mapEither(
                 onLeft = {},
@@ -209,6 +250,7 @@ class LogcatViewModel(
                     SidePanel.TAGS -> it.copy(tagsPanelWidth = intent.widthDp)
                     SidePanel.NETWORK -> it.copy(networkPanelWidth = intent.widthDp)
                     SidePanel.BOOKMARKS -> it.copy(bookmarksPanelWidth = intent.widthDp)
+                    SidePanel.PROBLEMS -> it.copy(problemsPanelWidth = intent.widthDp)
                     SidePanel.NONE -> it
                 }
             }
@@ -268,7 +310,11 @@ class LogcatViewModel(
                 tag = intent.tag,
                 groupName = intent.groupName,
             )
-            is LogcatIntent.RemoveTagFromGroup -> tagNotesStore.removeFromGroup(tag = intent.tag)
+            is LogcatIntent.GroupTags -> tagNotesStore.groupTags(
+                tags = intent.tags,
+                groupName = intent.groupName,
+            )
+            is LogcatIntent.UngroupTags -> tagNotesStore.ungroupTags(tags = intent.tags)
             is LogcatIntent.RenameTagGroup -> tagNotesStore.renameGroup(
                 from = intent.from,
                 to = intent.to,
@@ -320,6 +366,50 @@ class LogcatViewModel(
             LogcatIntent.ChooseMapping -> _events.trySend(element = LogcatEvent.ShowMappingChooser)
             is LogcatIntent.LoadMapping -> loadMapping(file = intent.file)
             LogcatIntent.RemoveMapping -> removeMapping()
+            is LogcatIntent.JumpToProblem -> workScope.launch {
+                jumpToProblem(
+                    sessionId = intent.sessionId,
+                    key = intent.key,
+                    back = intent.back,
+                )
+            }
+            is LogcatIntent.DeleteProblem -> workScope.launch {
+                if (intent.sessionId == session.id) recorder.remove(key = intent.key)
+                problemHistoryStore.deleteProblem(
+                    id = intent.sessionId,
+                    key = intent.key,
+                )
+                publishProblems()
+            }
+            is LogcatIntent.DeleteProblemSession -> workScope.launch {
+                if (intent.id == session.id) recorder.clear()
+                problemHistoryStore.delete(id = intent.id)
+                publishProblems()
+            }
+            is LogcatIntent.RenameProblemSession -> workScope.launch {
+                if (intent.id == session.id && intent.title.isNotBlank()) session = session.copy(title = intent.title.trim())
+                problemHistoryStore.rename(
+                    id = intent.id,
+                    title = intent.title,
+                )
+                publishProblems()
+            }
+            is LogcatIntent.DeleteProblemHistoryBefore -> problemHistoryStore.deleteOlderThan(
+                cutoffEpochMillis = intent.epochMillis,
+                keepId = session.id,
+            )
+            is LogcatIntent.IgnoreProblem -> workScope.launch {
+                recorder.remove(key = intent.key)
+                problemHistoryStore.ignore(key = intent.key)
+                problemHistoryStore.deleteProblem(
+                    id = session.id,
+                    key = intent.key,
+                )
+            }
+            LogcatIntent.ResetIgnoredProblems -> problemHistoryStore.clearIgnored()
+            is LogcatIntent.OpenLogFile -> openLogFile(file = intent.file)
+            LogcatIntent.CloseLogFile -> closeLogFile()
+            is LogcatIntent.SymbolizeNativeCrash -> workScope.launch { collectNativeBacktrace(id = intent.id) }
         }
     }
 
@@ -350,7 +440,8 @@ class LogcatViewModel(
         }
         _state.update { it.copy(devices = devices, selectedSerial = serial) }
         val device = devices.firstOrNull { it.serial == serial }
-        if (device?.state == DeviceState.ONLINE && streamJob?.isActive != true) {
+        // A pane showing a log file does not stream until the user goes back to live.
+        if (device?.state == DeviceState.ONLINE && streamJob?.isActive != true && _state.value.openedFileName.isEmpty()) {
             startStreaming(serial = serial)
         }
         refreshContent()
@@ -364,6 +455,7 @@ class LogcatViewModel(
             requestedPids.clear()
             _state.update {
                 it.copy(
+                    openedFileName = "",
                     selectedSerial = serial,
                     entries = emptyList(),
                     totalCount = 0,
@@ -383,6 +475,12 @@ class LogcatViewModel(
     private suspend fun startStreaming(serial: String) {
         stopStreaming()
         streamingSerial = serial
+        withContext(context = bufferDispatcher) {
+            beginSession(
+                title = deviceName(serial = serial),
+                serial = serial,
+            )
+        }
         val generation = ++streamGeneration
         val since = withContext(context = bufferDispatcher) {
             val last = buffer.lastEntry
@@ -446,6 +544,19 @@ class LogcatViewModel(
 
     private fun onBatch(received: List<LogEntry>) {
         val batch = retracer?.let { current -> received.map { it.withMessage(message = current.retrace(message = it.message)) } } ?: received
+        // The project app starting begins a new problem session, and with the setting on, a new log.
+        val launchIndex = batch.indexOfLast { isProjectAppLaunch(entry = it) }
+        if (launchIndex < 0) {
+            ingest(batch = batch)
+            return
+        }
+        if (launchIndex > 0) ingest(batch = batch.subList(0, launchIndex))
+        onAppLaunch(entry = batch[launchIndex])
+        ingest(batch = batch.subList(launchIndex, batch.size))
+    }
+
+    private fun ingest(batch: List<LogEntry>) {
+        if (batch.isEmpty()) return
         buffer.append(entries = batch)
         isDirty = true
         if (bookmarkKeys.isNotEmpty()) {
@@ -463,6 +574,7 @@ class LogcatViewModel(
         for (entry in batch) {
             if (networkTracker.onEntry(entry = entry)) isNetworkDirty = true
             if (entry.isCrash) crashes++
+            recordProblem(entry = entry)
         }
         if (crashes > 0) _state.update { it.copy(crashCount = it.crashCount + crashes) }
         val names = _state.value.processNames
@@ -501,6 +613,10 @@ class LogcatViewModel(
         while (true) {
             delay(duration = PUBLISH_INTERVAL)
             if (isDirty && !_state.value.isPaused) publish()
+            // Problems refresh even while paused: a crash should show at once.
+            val now = System.currentTimeMillis()
+            if (recorder.isDirty && now - lastProblemsPublish >= PROBLEMS_INTERVAL_MILLIS) publishProblems()
+            if (isHistoryDirty && now - lastHistorySave >= HISTORY_SAVE_INTERVAL_MILLIS) saveSession()
         }
     }
 
@@ -527,6 +643,7 @@ class LogcatViewModel(
         _state.update {
             it.copy(
                 entries = entries,
+                contextIds = buffer.contextIdsSnapshot(),
                 totalCount = buffer.totalCount,
                 tagCounts = tagCounts,
                 tagPids = tagPids,
@@ -535,6 +652,210 @@ class LogcatViewModel(
             )
         }
     }
+
+    // region Problems
+
+    private fun isProjectAppLaunch(entry: LogEntry): Boolean {
+        val event = entry.processEvent as? ProcessEvent.Started ?: return false
+        return event.packageName in _state.value.projectAppIds
+    }
+
+    private fun onAppLaunch(entry: LogEntry) {
+        if (_state.value.openedFileName.isNotEmpty()) return
+        if (settings.state.clearOnAppLaunch) clearLog()
+        val app = (entry.processEvent as? ProcessEvent.Started)?.packageName.orEmpty()
+        beginSession(
+            title = BetterLogcatBundle.message("problems.session.launch", app, deviceName(serial = _state.value.selectedSerial)),
+            serial = _state.value.selectedSerial,
+        )
+    }
+
+    /** Saves the live session, then starts a new one. Lines already in a saved session of the device are skipped. */
+    private fun beginSession(
+        title: String,
+        serial: String,
+    ) {
+        saveSession()
+        recorder.clear()
+        sessionSkipUntil = ProblemHistory.savedUntil(
+            sessions = savedSessions,
+            deviceSerial = serial,
+        )
+        session = ProblemSession(
+            id = UUID.randomUUID().toString(),
+            title = title,
+            deviceSerial = serial,
+            startedEpochMillis = System.currentTimeMillis(),
+            problems = emptyList(),
+        )
+        publishProblems()
+    }
+
+    private fun deviceName(serial: String): String = _state.value.devices.firstOrNull { it.serial == serial }?.name ?: serial
+
+    /**
+     * Records [entry] when it is a problem the filter shows. A crash or ANR of the project app counts
+     * even when the filter hides it: an ANR line comes from system_server, not from the app.
+     */
+    private fun recordProblem(entry: LogEntry) {
+        if (entry.problem == null && entry.tag != CHOREOGRAPHER) return
+        val millis = entry.epochSeconds * 1_000 + entry.nanos / 1_000_000
+        if (millis <= sessionSkipUntil) return
+        if (!matcher.matches(entry) && !isProjectAppFailure(entry = entry)) return
+        val kind = recorder.record(
+            entry = entry,
+            processName = _state.value.processNames[entry.pid].orEmpty(),
+            ignoredKeys = ignoredProblems,
+        ) ?: return
+        isHistoryDirty = true
+        if (kind == ProblemKind.CRASH || kind == ProblemKind.ANR) noticeCrash(entry = entry, kind = kind, millis = millis)
+    }
+
+    private fun isProjectAppFailure(entry: LogEntry): Boolean {
+        val apps = _state.value.projectAppIds
+        return when (entry.problem) {
+            ProblemKind.ANR -> entry.message.removePrefix(prefix = "ANR in ").substringBefore(delimiter = ' ').substringBefore(delimiter = ':') in apps
+            ProblemKind.CRASH -> _state.value.processNames[entry.pid].orEmpty().substringBefore(delimiter = ':') in apps
+            else -> false
+        }
+    }
+
+    /** Tells the screen about a new crash, at most once in a few seconds, and not for old lines replayed from the device. */
+    private fun noticeCrash(
+        entry: LogEntry,
+        kind: ProblemKind,
+        millis: Long,
+    ) {
+        val now = System.currentTimeMillis()
+        if (_state.value.openedFileName.isNotEmpty() || !settings.state.notifyOnCrash) return
+        if (now - millis > RECENT_CRASH_MILLIS || now - lastCrashNotice < CRASH_NOTICE_GAP_MILLIS) return
+        lastCrashNotice = now
+        val title = ProblemDescriptions.describe(
+            entry = entry,
+            kind = kind,
+        ).title
+        _events.trySend(
+            element = LogcatEvent.AppCrashed(
+                entryId = entry.id,
+                kind = kind,
+                title = title,
+            ),
+        )
+    }
+
+    private fun publishProblems() {
+        lastProblemsPublish = System.currentTimeMillis()
+        session = session.copy(problems = recorder.snapshot())
+        val current = session
+        _state.update {
+            it.copy(
+                problems = ProblemsUiModel(
+                    current = current,
+                    history = savedSessions.filter { saved -> saved.id != current.id },
+                    frameSkips = recorder.frameSkips(),
+                    ignoredCount = ignoredProblems.size,
+                ),
+            )
+        }
+    }
+
+    /** Writes the live session to the project's history. A log file's problems are not saved. */
+    private fun saveSession() {
+        isHistoryDirty = false
+        lastHistorySave = System.currentTimeMillis()
+        if (_state.value.openedFileName.isNotEmpty()) return
+        problemHistoryStore.save(session = session.copy(problems = recorder.snapshot()))
+    }
+
+    private fun jumpToProblem(
+        sessionId: String,
+        key: String,
+        back: Int,
+    ) {
+        if (sessionId == session.id) {
+            val ids = recorder.liveIds(key = key).filter { buffer.find(id = it) != null }
+            if (ids.isNotEmpty()) {
+                jumpToEntry(id = ids[ids.lastIndex - back.mod(other = ids.size)])
+                return
+            }
+        }
+        // The lines left the log (Clear, trim, another session): show the saved copy.
+        val problem = (listOf(session) + savedSessions).firstOrNull { it.id == sessionId }?.problems?.firstOrNull { it.key == key } ?: return
+        _events.trySend(element = LogcatEvent.OpenInEditor(entry = problem.toLogEntry()))
+    }
+
+    /** The backtrace crash_dump logs after a "Fatal signal" line: tag DEBUG, within a few seconds. */
+    private fun collectNativeBacktrace(id: Long) {
+        val crash = buffer.find(id = id) ?: return
+        val until = crash.epochSeconds + NATIVE_BACKTRACE_SECONDS
+        val lines = ArrayList<String>()
+        buffer.forEachEntry { entry ->
+            if (entry.id > crash.id && entry.epochSeconds <= until && entry.tag == NATIVE_DEBUG_TAG) lines += entry.lines
+        }
+        _events.trySend(
+            element = LogcatEvent.SymbolizeBacktrace(
+                crash = crash,
+                backtrace = lines,
+            ),
+        )
+    }
+
+    // endregion
+
+    // region Log files
+
+    private fun openLogFile(file: File) {
+        workScope.launch {
+            val parsed = withContext(context = Dispatchers.IO) { runCatching { LogFileParser.parse(text = file.readText()) } }.getOrNull()
+            if (parsed == null || parsed.entries.isEmpty()) {
+                showStatus(message = BetterLogcatBundle.message("status.openFileFailed", file.name))
+                return@launch
+            }
+            saveSession()
+            stopStreaming()
+            clearLog()
+            recorder.clear()
+            sessionSkipUntil = Long.MIN_VALUE
+            session = session.copy(
+                id = UUID.randomUUID().toString(),
+                title = file.name,
+                deviceSerial = "",
+                startedEpochMillis = System.currentTimeMillis(),
+            )
+            _state.update {
+                it.copy(
+                    openedFileName = file.name,
+                    processNames = parsed.processNames,
+                    content = LogcatContentUiModel.Logs(isDeviceConnected = false),
+                )
+            }
+            parsed.entries.chunked(size = FILE_CHUNK).forEach { ingest(batch = it) }
+            publishProblems()
+            publish()
+            showStatus(message = BetterLogcatBundle.message("status.openedFile", parsed.entries.size, file.name))
+        }
+    }
+
+    private fun closeLogFile() {
+        workScope.launch {
+            _state.update {
+                it.copy(
+                    openedFileName = "",
+                    processNames = emptyMap(),
+                )
+            }
+            clearLog()
+            recorder.clear()
+            requestedPids.clear()
+            val device = _state.value.selectedDevice
+            if (device?.state == DeviceState.ONLINE) startStreaming(serial = device.serial)
+            publishProblems()
+            publish()
+            refreshContent()
+        }
+    }
+
+    // endregion
 
     private fun rebuildMatcher() {
         matcher = LogFilterMatcher(
@@ -547,29 +868,18 @@ class LogcatViewModel(
     private fun refilter() {
         rebuildMatcher()
         val current = matcher
-        buffer.refilter(predicate = current::matches)
+        buffer.refilter(
+            predicate = current::matches,
+            context = current.contextLines,
+        )
         _state.update { it.copy(isQueryValid = current.isQueryValid) }
         publish()
     }
 
     private fun clear() {
+        // The problem session goes on: its problems stay in the Problems panel after Clear.
         workScope.launch {
-            buffer.clear()
-            networkTracker.clear()
-            liveBookmarkIds.clear()
-            bookmarkStore.onLogCleared()
-            _state.update {
-                it.copy(
-                    selection = SelectionUiModel(),
-                    toggledIds = emptySet(),
-                    pausedNewCount = 0,
-                    networkCalls = emptyList(),
-                    networkDetail = null,
-                    crashCount = 0,
-                    tagRates = emptyMap(),
-                )
-            }
-            publishBookmarks()
+            clearLog()
             publish()
         }
         val serial = _state.value.selectedSerial
@@ -582,6 +892,27 @@ class LogcatViewModel(
                 )
                 .launchIn(scope = workScope)
         }
+    }
+
+    /** Empties the log, network calls and selection. Buffer thread only. */
+    private fun clearLog() {
+        buffer.clear()
+        networkTracker.clear()
+        liveBookmarkIds.clear()
+        bookmarkStore.onLogCleared()
+        isDirty = true
+        _state.update {
+            it.copy(
+                selection = SelectionUiModel(),
+                toggledIds = emptySet(),
+                pausedNewCount = 0,
+                networkCalls = emptyList(),
+                networkDetail = null,
+                crashCount = 0,
+                tagRates = emptyMap(),
+            )
+        }
+        publishBookmarks()
     }
 
     private fun togglePause() {
@@ -787,6 +1118,7 @@ class LogcatViewModel(
             tagsPanelWidth = options.tagsPanelWidth
             networkPanelWidth = options.networkPanelWidth
             bookmarksPanelWidth = options.bookmarksPanelWidth
+            problemsPanelWidth = options.problemsPanelWidth
             networkDetailHeight = options.networkDetailHeight
             includeThreadId = options.includeThreadId
             showRepeatedTags = options.showRepeatedTags
@@ -1135,6 +1467,7 @@ class LogcatViewModel(
                 tagsPanelWidth = saved.tagsPanelWidth,
                 networkPanelWidth = saved.networkPanelWidth,
                 bookmarksPanelWidth = saved.bookmarksPanelWidth,
+                problemsPanelWidth = saved.problemsPanelWidth,
                 networkDetailHeight = saved.networkDetailHeight,
                 includeThreadId = saved.includeThreadId,
                 showRepeatedTags = saved.showRepeatedTags,
@@ -1165,6 +1498,14 @@ class LogcatViewModel(
         val HISTORY_DEBOUNCE = 3.seconds
         val AGE_REFRESH = 5.seconds
         const val RATES_INTERVAL_MILLIS = 1_000L
+        const val PROBLEMS_INTERVAL_MILLIS = 500L
+        const val HISTORY_SAVE_INTERVAL_MILLIS = 2_000L
+        const val RECENT_CRASH_MILLIS = 60_000L
+        const val CRASH_NOTICE_GAP_MILLIS = 5_000L
+        const val NATIVE_BACKTRACE_SECONDS = 15L
+        const val NATIVE_DEBUG_TAG = "DEBUG"
+        const val CHOREOGRAPHER = "Choreographer"
+        const val FILE_CHUNK = 5_000
         const val MAX_HISTORY = 20
         const val NANOS_PER_SECOND = 1_000_000_000L
         const val MIN_COLUMN_WIDTH = 32

@@ -20,6 +20,7 @@ import com.melihaksoy.betterlogcat.ide.BetterLogcatProjectService
 import com.melihaksoy.betterlogcat.ide.AppearanceStore
 import com.melihaksoy.betterlogcat.ide.BookmarkStore
 import com.melihaksoy.betterlogcat.ide.PackageAliasStore
+import com.melihaksoy.betterlogcat.ide.ProblemHistoryStore
 import com.melihaksoy.betterlogcat.ide.SourceNavigator
 import com.melihaksoy.betterlogcat.interactor.ClearDeviceLogInteractorImpl
 import com.melihaksoy.betterlogcat.interactor.ObserveProcessesInteractorImpl
@@ -62,6 +63,7 @@ class LogcatPane(
         appearanceStore = AppearanceStore.getInstance(),
         bookmarkStore = BookmarkStore.getInstance(project = project),
         tagNotesStore = TagNotesStore.getInstance(),
+        problemHistoryStore = ProblemHistoryStore.getInstance(project = project),
     )
 
     private val paneActions = actions(this)
