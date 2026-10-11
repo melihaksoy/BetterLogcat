@@ -412,8 +412,10 @@ class RenderProbeTest : BasePlatformTestCase() {
         }
     }
 
+    // RENDER_SIZE=2400x1520 renders every screen at one size, for a matching Marketplace screenshot set.
     private fun render(file: File, width: Int = 2400, height: Int = 1100, content: @Composable () -> Unit) {
-        val scene = ImageComposeScene(width = width, height = height, density = Density(density = 2f)) {
+        val size = System.getenv("RENDER_SIZE")?.split('x')?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 }
+        val scene = ImageComposeScene(width = size?.get(0) ?: width, height = size?.get(1) ?: height, density = Density(density = 2f)) {
             BetterLogcatPreviewTheme { content() }
         }
         scene.render()
