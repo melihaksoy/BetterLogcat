@@ -221,6 +221,7 @@ internal fun LogcatContent(
                         colors = colors,
                         keywords = keywords,
                         onOpenInEditor = popups::openInEditor,
+                        onCallMenu = popups::showNetworkCallMenu,
                         onIntent = onIntent,
                     )
                     SidePanel.PROBLEMS -> ProblemsPanel(

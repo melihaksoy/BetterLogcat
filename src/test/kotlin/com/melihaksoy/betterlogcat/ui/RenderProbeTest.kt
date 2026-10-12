@@ -94,10 +94,12 @@ class RenderProbeTest : BasePlatformTestCase() {
                 levelColors = mapOf(com.melihaksoy.betterlogcat.model.LogLevel.DEBUG to 0xFF2EB67D),
                 highlightRules = listOf(com.melihaksoy.betterlogcat.model.HighlightRule(pattern = "412 ms", colorArgb = 0xFFE06C75, isRegex = false)),
                 presetHighlights = com.melihaksoy.betterlogcat.model.PresetHighlights(enabledIds = setOf("ktor")),
+                hiddenUrlBases = listOf("https://api.example.com"),
                 onIntent = {},
                 onOpenIdeSettings = {},
                 onEditAlias = {},
                 onAddAlias = {},
+                onAddUrlBase = {},
                 onPickColor = { _, _ -> },
             )
         }
@@ -265,6 +267,19 @@ class RenderProbeTest : BasePlatformTestCase() {
                 }
             }
         }
+        val urls = com.melihaksoy.betterlogcat.format.UrlShortener(bases = listOf("https://staging.example.com", "assets.example.com"))
+        render(File(dir, "hidden-urls.png"), width = 2400, height = 1500) {
+            androidx.compose.foundation.layout.Column {
+                listOf(false, true).forEach { expanded ->
+                    com.melihaksoy.betterlogcat.ui.logcat.component.LogRow(
+                        entry = entry, previous = null, processName = "com.example.app.debug", isSelected = false, isExpanded = expanded,
+                        viewOptions = options, highlighter = com.melihaksoy.betterlogcat.ui.logcat.component.SearchHighlighter.None,
+                        colors = com.melihaksoy.betterlogcat.ui.theme.rememberLogColors(), textStyle = org.jetbrains.jewel.foundation.theme.JewelTheme.editorTextStyle,
+                        isStacked = false, urls = urls, onToggleExpanded = {}, onOpenFrame = {},
+                    )
+                }
+            }
+        }
     }
 
     fun testRenderGutterAndNetwork() {
@@ -426,6 +441,66 @@ class RenderProbeTest : BasePlatformTestCase() {
             scene.render(nanoTime = frameTime)
         }
         File(dir, "no-wrap-scrolled.png").writeBytes(scene.render(nanoTime = frameTime + 16_000_000L).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+        scene.close()
+    }
+
+    /** Double-click on a big collapsed response: before.png, then after.png. CLICK_X/CLICK_Y in scene pixels, SOFT_WRAP=false for sideways scroll. */
+    fun testRenderDoubleClick() {
+        val dir = System.getenv("RENDER_DIR") ?: return
+        val body = "{\"data\":[" + (1..30).joinToString(",") { "{\"id\":\"C205007$it\",\"listing_type\":\"basic\",\"vehicle\":{\"make\":{\"name\":\"Volkswagen\"},\"year\":\"1977\"}}" } + "]}"
+        val big = listOf("RESPONSE: 200", "METHOD: GET", "FROM: https://staging.example.com/app-api/v1/search/top-picks", "BODY START", body, "BODY END").joinToString("\n")
+        val entries = (1L..(System.getenv("ROWS")?.toLongOrNull() ?: 48L)).map { id ->
+            com.melihaksoy.betterlogcat.model.LogEntry(
+                id = id, epochSeconds = 1_791_540_000L + id, nanos = 0, pid = 3776, tid = 4977,
+                level = LogLevel.INFO, tag = if (id == 41L) "Ktor Client" else "Filler",
+                message = if (id == 41L) big else "filler line $id",
+            )
+        }
+        val base = LogcatPreviewData.logsState
+        val softWrap = System.getenv("SOFT_WRAP") != "false"
+        val scene = ImageComposeScene(width = 2400, height = 1100, density = Density(density = 2f)) {
+            BetterLogcatPreviewTheme {
+                LogcatContent(
+                    state = base.copy(
+                        entries = entries,
+                        selection = com.melihaksoy.betterlogcat.ui.logcat.model.SelectionUiModel(anchorId = 41, leadId = 41, selectedIds = setOf(41L)),
+                        viewOptions = base.viewOptions.copy(softWrap = softWrap, expandByDefault = true, expandJsonByDefault = System.getenv("EXPAND_JSON") == "true"),
+                    ),
+                    popups = LogcatPopups.None,
+                    paneActions = com.melihaksoy.betterlogcat.ui.logcat.pane.PaneActions.None,
+                    onIntent = {},
+                )
+            }
+        }
+        var frameTime = 0L
+        fun frames(count: Int) = repeat(times = count) {
+            scene.render(nanoTime = frameTime)
+            frameTime += 16_000_000L
+        }
+        frames(count = 30)
+        // SCROLL_STEPS wheel steps down, to sit inside the big message with more rows below it.
+        repeat(times = System.getenv("SCROLL_STEPS")?.toIntOrNull() ?: 0) {
+            scene.sendPointerEvent(
+                eventType = androidx.compose.ui.input.pointer.PointerEventType.Scroll,
+                position = androidx.compose.ui.geometry.Offset(x = 1200f, y = 600f),
+                scrollDelta = androidx.compose.ui.geometry.Offset(x = 0f, y = 10f),
+            )
+            frames(count = 2)
+        }
+        frames(count = 60)
+        File(dir, "before.png").writeBytes(scene.render(nanoTime = frameTime).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+        val x = System.getenv("CLICK_X")?.toFloatOrNull()
+        val y = System.getenv("CLICK_Y")?.toFloatOrNull()
+        if (x != null && y != null) {
+            val at = androidx.compose.ui.geometry.Offset(x = x, y = y)
+            repeat(times = 2) {
+                scene.sendPointerEvent(eventType = androidx.compose.ui.input.pointer.PointerEventType.Press, position = at, timeMillis = frameTime / 1_000_000L, button = androidx.compose.ui.input.pointer.PointerButton.Primary)
+                scene.sendPointerEvent(eventType = androidx.compose.ui.input.pointer.PointerEventType.Release, position = at, timeMillis = frameTime / 1_000_000L + 10, button = androidx.compose.ui.input.pointer.PointerButton.Primary)
+                frames(count = 3)
+            }
+            frames(count = 60)
+            File(dir, "after.png").writeBytes(scene.render(nanoTime = frameTime).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+        }
         scene.close()
     }
 

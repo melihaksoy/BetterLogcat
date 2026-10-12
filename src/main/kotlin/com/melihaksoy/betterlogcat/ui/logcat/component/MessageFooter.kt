@@ -104,7 +104,7 @@ private fun InfoChip(
 }
 
 @Composable
-private fun ActionChip(
+internal fun ActionChip(
     text: String,
     colors: LogColors,
     onClick: () -> Unit,

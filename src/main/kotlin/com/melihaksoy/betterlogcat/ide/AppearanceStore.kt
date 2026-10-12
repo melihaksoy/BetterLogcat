@@ -12,7 +12,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** User colors: level color overrides, keyword highlights and library presets. One store, so every pane updates at once. */
+/**
+ * User colors (level color overrides, keyword highlights, library presets) and hidden base URLs.
+ * One store, so every pane updates at once.
+ */
 @Service(Service.Level.APP)
 class AppearanceStore {
 
@@ -28,6 +31,11 @@ class AppearanceStore {
 
     private val _presets = MutableStateFlow(value = loadPresets())
     val presets: StateFlow<PresetHighlights> = _presets.asStateFlow()
+
+    private val _hiddenUrlBases = MutableStateFlow(value = settings.state.hiddenUrlBases.toList())
+
+    /** Base URLs the log hides, so a link shows only its path. */
+    val hiddenUrlBases: StateFlow<List<String>> = _hiddenUrlBases.asStateFlow()
 
     init {
         val (ownRules, presets) = PresetHighlights.migrateLegacy(
@@ -88,6 +96,23 @@ class AppearanceStore {
     ) {
         val current = _presets.value
         savePresets(presets = current.copy(roleColors = if (colorArgb == null) current.roleColors - role else current.roleColors + (role to colorArgb)))
+    }
+
+    /** Adds [base] without a trailing slash. A blank or known base changes nothing. */
+    fun addHiddenUrlBase(base: String) {
+        val trimmed = base.trim().trimEnd('/')
+        if (trimmed.isEmpty() || _hiddenUrlBases.value.any { it.equals(other = trimmed, ignoreCase = true) }) return
+        saveHiddenUrlBases(bases = _hiddenUrlBases.value + trimmed)
+    }
+
+    fun removeHiddenUrlBase(base: String) {
+        saveHiddenUrlBases(bases = _hiddenUrlBases.value - base)
+    }
+
+    private fun saveHiddenUrlBases(bases: List<String>) {
+        // Replaced, not changed in place, so the settings store sees the change.
+        settings.state.hiddenUrlBases = bases.toMutableList()
+        _hiddenUrlBases.value = bases
     }
 
     private fun saveRules(rules: List<HighlightRule>) {

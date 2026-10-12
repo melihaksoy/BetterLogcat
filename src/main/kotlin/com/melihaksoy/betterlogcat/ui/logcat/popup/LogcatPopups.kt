@@ -4,6 +4,7 @@ import com.melihaksoy.betterlogcat.model.LogEntry
 import com.melihaksoy.betterlogcat.model.ProblemKind
 import com.melihaksoy.betterlogcat.model.ProblemSession
 import com.melihaksoy.betterlogcat.model.SavedProblem
+import com.melihaksoy.betterlogcat.network.NetworkCall
 import com.melihaksoy.betterlogcat.ui.logcat.component.GutterUiModel
 import java.awt.Point
 
@@ -60,6 +61,12 @@ interface LogcatPopups {
     /** The export button: export, open a log file, compare with a log file. */
     fun showExportMenu(at: Point)
 
+    /** Right-click on a call in the Network panel: copy its path, URL or cURL. */
+    fun showNetworkCallMenu(
+        call: NetworkCall,
+        at: Point,
+    )
+
     /** A crash or ANR arrived: notify when the tool window is hidden. */
     fun noticeCrash(
         entryId: Long,
@@ -109,6 +116,10 @@ interface LogcatPopups {
         ) = Unit
         override fun showProblemsPanelMenu(at: Point) = Unit
         override fun showExportMenu(at: Point) = Unit
+        override fun showNetworkCallMenu(
+            call: NetworkCall,
+            at: Point,
+        ) = Unit
         override fun noticeCrash(
             entryId: Long,
             kind: ProblemKind,

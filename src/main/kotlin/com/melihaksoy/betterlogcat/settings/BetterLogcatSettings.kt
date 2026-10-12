@@ -73,6 +73,9 @@ class BetterLogcatSettings : SimplePersistentStateComponent<BetterLogcatSettings
         var tagGroups by list<String>()
         var levelColors by map<String, String>()
         var highlightRules by list<String>()
+
+        /** Base URLs the log hides, so a link shows only its path. */
+        var hiddenUrlBases by list<String>()
         var enabledPresets by list<String>()
 
         /** Role id to AARRGGBB hex. */

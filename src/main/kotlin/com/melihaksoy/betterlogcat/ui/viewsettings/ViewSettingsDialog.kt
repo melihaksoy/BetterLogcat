@@ -27,6 +27,7 @@ class ViewSettingsDialog(
     private val onOpenIdeSettings: () -> Unit,
     private val onEditAlias: (String) -> Unit,
     private val onAddAlias: () -> Unit,
+    private val onAddUrlBase: () -> Unit,
 ) : DialogWrapper(project, null, true, IdeModalityType.MODELESS) {
 
     private val dialogProject = project
@@ -47,10 +48,12 @@ class ViewSettingsDialog(
                 levelColors = current.levelColors,
                 highlightRules = current.ownHighlightRules,
                 presetHighlights = current.presetHighlights,
+                hiddenUrlBases = current.hiddenUrlBases,
                 onIntent = onIntent,
                 onOpenIdeSettings = onOpenIdeSettings,
                 onEditAlias = onEditAlias,
                 onAddAlias = onAddAlias,
+                onAddUrlBase = onAddUrlBase,
                 onPickColor = ::pickColor,
             )
         }

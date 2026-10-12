@@ -17,12 +17,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.requireLayoutCoordinates
+import androidx.compose.ui.relocation.BringIntoViewModifierNode
+import androidx.compose.ui.relocation.bringIntoView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
 import com.melihaksoy.betterlogcat.ui.theme.BetterLogcatPreviewTheme
 import com.melihaksoy.betterlogcat.ui.theme.LogColors
 import com.melihaksoy.betterlogcat.ui.theme.rememberLogColors
@@ -36,6 +44,10 @@ import org.jetbrains.jewel.foundation.theme.JewelTheme
  *
  * It is an editable field that drops every edit: Compose draws no caret in a read-only field, and the
  * caret shows where a click landed and lets Shift+arrows grow the selection, as in an editor.
+ *
+ * A focused field scrolls its caret into view. The caret starts at the first character, so on a big
+ * message the log jumped to the start of it (and to the left without soft-wrap). The field asks for no
+ * scroll until the user moves the caret.
  */
 @Composable
 internal fun SelectableText(
@@ -51,6 +63,7 @@ internal fun SelectableText(
         backgroundColor = colors.textSelection,
     )
     var value by remember(text) { mutableStateOf(value = TextFieldValue(annotatedString = text)) }
+    var hasUserMovedCaret by remember(text) { mutableStateOf(value = false) }
     val focusRequester = remember { FocusRequester() }
     // Focus at once, so the caret shows without a second click.
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
@@ -60,6 +73,7 @@ internal fun SelectableText(
             onValueChange = { new ->
                 // Caret moves and selections only. Typing, paste and cut keep the log text as it is.
                 if (new.text == value.text) {
+                    if (new.selection != value.selection) hasUserMovedCaret = true
                     value = value.copy(
                         selection = new.selection,
                         composition = null,
@@ -67,6 +81,7 @@ internal fun SelectableText(
                 }
             },
             modifier = modifier
+                .then(BringIntoViewBlockerElement(isBlocking = { !hasUserMovedCaret }))
                 .focusRequester(focusRequester = focusRequester)
                 .background(
                     color = colors.fieldBackground,
@@ -81,6 +96,39 @@ internal fun SelectableText(
             textStyle = textStyle.merge(color = color),
             cursorBrush = SolidColor(value = JewelTheme.globalColors.text.normal),
         )
+    }
+}
+
+/** Drops scroll-into-view requests from inside while [isBlocking] says so; passes the rest to the scrolling parents. */
+private class BringIntoViewBlockerNode(var isBlocking: () -> Boolean) : Modifier.Node(), BringIntoViewModifierNode {
+
+    override suspend fun bringIntoView(
+        childCoordinates: LayoutCoordinates,
+        boundsProvider: () -> Rect?,
+    ) {
+        if (isBlocking()) return
+        val own = requireLayoutCoordinates()
+        bringIntoView {
+            val bounds = boundsProvider() ?: Rect(
+                offset = Offset.Zero,
+                size = childCoordinates.size.toSize(),
+            )
+            bounds.translate(
+                offset = own.localPositionOf(
+                    sourceCoordinates = childCoordinates,
+                    relativeToSource = Offset.Zero,
+                ),
+            )
+        }
+    }
+}
+
+private data class BringIntoViewBlockerElement(val isBlocking: () -> Boolean) : ModifierNodeElement<BringIntoViewBlockerNode>() {
+
+    override fun create(): BringIntoViewBlockerNode = BringIntoViewBlockerNode(isBlocking = isBlocking)
+
+    override fun update(node: BringIntoViewBlockerNode) {
+        node.isBlocking = isBlocking
     }
 }
 

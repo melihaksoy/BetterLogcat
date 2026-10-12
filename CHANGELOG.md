@@ -2,6 +2,10 @@
 
 ## 0.12.3
 - Fixed: typing in the device and package pickers' search field did nothing; the popup now gets the focus.
+- Network panel: right-click a call to copy its path, URL or cURL. The detail pane has copy and open
+  actions under the address.
+- Hidden base URLs (view settings): links in log messages show without the base; a click opens the full URL.
+- Fixed: a double-click into a long expanded message no longer moves the log.
 
 ## 0.12.2
 - Signed release of 0.12.1 (0.12.1 went to the Marketplace unsigned).

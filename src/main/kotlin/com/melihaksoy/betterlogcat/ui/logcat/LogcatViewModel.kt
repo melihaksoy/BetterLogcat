@@ -185,6 +185,9 @@ class LogcatViewModel(
         appearanceStore.levelColors
             .onEach { colors -> _state.update { it.copy(levelColors = colors) } }
             .launchIn(scope = workScope)
+        appearanceStore.hiddenUrlBases
+            .onEach { bases -> _state.update { it.copy(hiddenUrlBases = bases) } }
+            .launchIn(scope = workScope)
         combine(
             flow = appearanceStore.highlightRules,
             flow2 = appearanceStore.presets,
@@ -271,6 +274,8 @@ class LogcatViewModel(
             )
             is LogcatIntent.AddHighlightRule -> appearanceStore.addRule(rule = intent.rule)
             is LogcatIntent.RemoveHighlightRule -> appearanceStore.removeRule(rule = intent.rule)
+            is LogcatIntent.AddHiddenUrlBase -> appearanceStore.addHiddenUrlBase(base = intent.base)
+            is LogcatIntent.RemoveHiddenUrlBase -> appearanceStore.removeHiddenUrlBase(base = intent.base)
             is LogcatIntent.SetPresetEnabled -> appearanceStore.setPresetEnabled(
                 preset = intent.preset,
                 isEnabled = intent.isEnabled,

@@ -33,6 +33,7 @@ import com.intellij.ide.BrowserUtil
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
 import com.melihaksoy.betterlogcat.format.LogTimeFormatter
 import com.melihaksoy.betterlogcat.format.StackFrame
+import com.melihaksoy.betterlogcat.format.UrlShortener
 import com.melihaksoy.betterlogcat.model.LogColumn
 import com.melihaksoy.betterlogcat.model.LogEntry
 import com.melihaksoy.betterlogcat.model.LogLevel
@@ -68,6 +69,7 @@ internal fun LogRow(
     selectedCell: SelectableCell = SelectableCell.NONE,
     isSelectedAbove: Boolean = false,
     keywords: KeywordHighlighter = KeywordHighlighter.None,
+    urls: UrlShortener = UrlShortener.None,
     isFullyShown: Boolean = false,
     onShowAll: () -> Unit = {},
     /** First piece of a split big message; the list shows the other pieces as more items. Null builds the text here. */
@@ -141,6 +143,7 @@ internal fun LogRow(
                 prettyJson = viewOptions.prettyJson,
                 highlighter = highlighter,
                 keywords = keywords,
+                urls = urls,
                 isFullyShown = isFullyShown,
                 colors = colors,
                 textStyle = textStyle,
@@ -181,6 +184,7 @@ internal fun LogRow(
                 prettyJson = viewOptions.prettyJson,
                 highlighter = highlighter,
                 keywords = keywords,
+                urls = urls,
                 isFullyShown = isFullyShown,
                 colors = colors,
                 textStyle = textStyle,
@@ -411,6 +415,7 @@ private fun MessageCell(
     prettyJson: Boolean,
     highlighter: SearchHighlighter,
     keywords: KeywordHighlighter,
+    urls: UrlShortener,
     isFullyShown: Boolean,
     colors: LogColors,
     textStyle: TextStyle,
@@ -429,7 +434,9 @@ private fun MessageCell(
         level = entry.level,
         colors = colors,
     )
-    val text = textOverride ?: remember(entry, isExpanded, isFullyShown, prettyJson, highlighter, keywords, colors, textColor) {
+    // Selecting text shows full addresses, so a copied part has the real URL.
+    val shownUrls = if (isTextSelecting) UrlShortener.None else urls
+    val text = textOverride ?: remember(entry, isExpanded, isFullyShown, prettyJson, highlighter, keywords, shownUrls, colors, textColor) {
         buildMessageText(
             entry = entry,
             isExpanded = isExpanded,
@@ -439,6 +446,7 @@ private fun MessageCell(
             colors = colors,
             highlighter = highlighter,
             keywords = keywords,
+            urls = shownUrls,
             labels = messageLabels(),
             onOpenFrame = { currentOnOpenFrame(it) },
             onOpenUrl = { BrowserUtil.browse(it) },

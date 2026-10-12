@@ -17,6 +17,8 @@ import com.melihaksoy.betterlogcat.format.JsonHighlighter
 import com.melihaksoy.betterlogcat.format.StackFrame
 import com.melihaksoy.betterlogcat.format.StackFrameParser
 import com.melihaksoy.betterlogcat.format.UrlFinder
+import com.melihaksoy.betterlogcat.format.UrlMatch
+import com.melihaksoy.betterlogcat.format.UrlShortener
 import com.melihaksoy.betterlogcat.model.HighlightRule
 import com.melihaksoy.betterlogcat.model.JsonContent
 import com.melihaksoy.betterlogcat.model.LogEntry
@@ -122,6 +124,8 @@ internal fun buildMessageText(
     colors: LogColors,
     highlighter: SearchHighlighter,
     keywords: KeywordHighlighter,
+    /** Base URLs to hide. The network pane passes none: it shows full addresses. */
+    urls: UrlShortener = UrlShortener.None,
     labels: MessageLabels,
     onOpenFrame: (StackFrame) -> Unit,
     onOpenUrl: (String) -> Unit,
@@ -135,6 +139,7 @@ internal fun buildMessageText(
                 colors = colors,
                 highlighter = highlighter,
                 keywords = keywords,
+                urls = urls,
                 onOpenFrame = onOpenFrame,
                 onOpenUrl = onOpenUrl,
             )
@@ -146,6 +151,7 @@ internal fun buildMessageText(
                 colors = colors,
                 highlighter = highlighter,
                 keywords = keywords,
+                urls = urls,
                 onOpenUrl = onOpenUrl,
             )
         }
@@ -315,18 +321,20 @@ private fun AnnotatedString.Builder.appendJson(
     colors: LogColors,
     highlighter: SearchHighlighter,
     keywords: KeywordHighlighter,
+    urls: UrlShortener,
     onOpenUrl: (String) -> Unit,
 ) {
+    val shown = urls.shorten(text = json)
     val start = length
     pushStyle(style = SpanStyle(color = textColor))
-    append(json)
+    append(shown.text)
     pop()
     keywords.apply(
         builder = this,
-        text = json,
+        text = shown.text,
         offset = start,
     )
-    JsonHighlighter.tokens(json = json).forEach { token ->
+    JsonHighlighter.tokens(json = shown.text).forEach { token ->
         addStyle(
             style = SpanStyle(color = colors.json(kind = token.kind)),
             start = start + token.start,
@@ -334,12 +342,12 @@ private fun AnnotatedString.Builder.appendJson(
         )
     }
     addUrlLinks(
-        text = json,
+        links = shown.links,
         offset = start,
         colors = colors,
         onOpenUrl = onOpenUrl,
     )
-    highlighter.ranges(text = json).forEach { range ->
+    highlighter.ranges(text = shown.text).forEach { range ->
         addStyle(
             style = SpanStyle(background = colors.searchHighlight),
             start = start + range.first,
@@ -366,12 +374,12 @@ private fun sizeLabel(chars: Int): String = if (chars < 1_024) "$chars B" else S
 
 /** Makes web links clickable. Underlined in the link color, opened in the browser. */
 private fun AnnotatedString.Builder.addUrlLinks(
-    text: String,
+    links: List<UrlMatch>,
     offset: Int,
     colors: LogColors,
     onOpenUrl: (String) -> Unit,
 ) {
-    UrlFinder.find(text = text).forEach { match ->
+    links.forEach { match ->
         addLink(
             clickable = LinkAnnotation.Clickable(
                 tag = "url",
@@ -395,11 +403,13 @@ private fun AnnotatedString.Builder.appendMessage(
     colors: LogColors,
     highlighter: SearchHighlighter,
     keywords: KeywordHighlighter,
+    urls: UrlShortener,
     onOpenFrame: (StackFrame) -> Unit,
     onOpenUrl: (String) -> Unit,
 ) {
     // Compose draws a tab as one narrow space, so stack traces lose their indent.
-    val display = text.replace("\t", TAB_SPACES)
+    val shown = urls.shorten(text = text.replace("\t", TAB_SPACES))
+    val display = shown.text
     val start = length
     pushStyle(style = SpanStyle(color = textColor))
     append(display)
@@ -426,7 +436,7 @@ private fun AnnotatedString.Builder.appendMessage(
         offset = start,
     )
     addUrlLinks(
-        text = display,
+        links = shown.links,
         offset = start,
         colors = colors,
         onOpenUrl = onOpenUrl,

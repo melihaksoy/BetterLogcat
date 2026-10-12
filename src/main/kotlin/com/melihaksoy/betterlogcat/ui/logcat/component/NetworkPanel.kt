@@ -48,10 +48,11 @@ import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.TextField
 import org.jetbrains.jewel.ui.component.VerticalScrollbar
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
+import java.awt.Point
 
 /**
  * HTTP calls found in the logs (Ktor and OkHttp), newest first: status, method, path and time.
- * Click a call to jump to its response, or its request while it is still open.
+ * Click a call to jump to its response, or its request while it is still open. Right-click to copy its address.
  */
 @Composable
 internal fun NetworkPanel(
@@ -62,6 +63,7 @@ internal fun NetworkPanel(
     colors: LogColors,
     keywords: KeywordHighlighter = KeywordHighlighter.None,
     onOpenInEditor: (LogEntry) -> Unit = {},
+    onCallMenu: (NetworkCall, Point) -> Unit = { _, _ -> },
     onIntent: (LogcatIntent) -> Unit,
 ) {
     val searchState = rememberTextFieldState()
@@ -135,6 +137,12 @@ internal fun NetworkPanel(
                                 onIntent(LogcatIntent.JumpToEntry(id = target))
                                 onIntent(LogcatIntent.SelectNetworkCall(call = call))
                             },
+                            onMenu = { at ->
+                                onCallMenu(
+                                    call,
+                                    at,
+                                )
+                            },
                         )
                     }
                 }
@@ -162,6 +170,12 @@ internal fun NetworkPanel(
                 colors = colors,
                 keywords = keywords,
                 onOpenInEditor = onOpenInEditor,
+                onCallMenu = { at ->
+                    onCallMenu(
+                        detail.call,
+                        at,
+                    )
+                },
                 onIntent = onIntent,
             )
         }
@@ -174,6 +188,7 @@ private fun CallRow(
     isSelected: Boolean,
     colors: LogColors,
     onClick: () -> Unit,
+    onMenu: (Point) -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
@@ -187,6 +202,7 @@ private fun CallRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(rememberContextClickModifier(onClick = onMenu))
             .hoverable(interactionSource = interactionSource)
             .background(
                 color = when {
@@ -227,7 +243,7 @@ private fun CallRow(
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            text = path(url = call.url),
+            text = call.path,
             modifier = Modifier.weight(1f),
             style = JewelTheme.editorTextStyle,
             maxLines = 1,
@@ -241,13 +257,6 @@ private fun CallRow(
             )
         }
     }
-}
-
-/** The address without scheme and host: `https://api.x.com/v1/items?id=2` → `/v1/items?id=2`. */
-private fun path(url: String): String {
-    val afterScheme = url.substringAfter("://", missingDelimiterValue = url)
-    val slash = afterScheme.indexOf('/')
-    return if (slash < 0) afterScheme else afterScheme.substring(slash)
 }
 
 // region Previews

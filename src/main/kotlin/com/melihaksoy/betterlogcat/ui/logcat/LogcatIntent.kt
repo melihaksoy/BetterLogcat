@@ -44,6 +44,8 @@ sealed interface LogcatIntent {
     ) : LogcatIntent
     data class AddHighlightRule(val rule: HighlightRule) : LogcatIntent
     data class RemoveHighlightRule(val rule: HighlightRule) : LogcatIntent
+    data class AddHiddenUrlBase(val base: String) : LogcatIntent
+    data class RemoveHiddenUrlBase(val base: String) : LogcatIntent
     data class SetPresetEnabled(
         val preset: HighlightPreset,
         val isEnabled: Boolean,

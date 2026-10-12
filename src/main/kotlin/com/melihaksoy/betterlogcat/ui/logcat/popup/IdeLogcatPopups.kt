@@ -507,6 +507,17 @@ class IdeLogcatPopups(
         if (packageName.isNotEmpty()) editAlias(packageName = packageName)
     }
 
+    /** Asks for a base URL that the log hides. */
+    private fun addHiddenUrlBase() {
+        val base = Messages.showInputDialog(
+            project,
+            BetterLogcatBundle.message("hiddenUrls.prompt"),
+            BetterLogcatBundle.message("hiddenUrls.dialogTitle"),
+            null,
+        ) ?: return
+        onIntent(LogcatIntent.AddHiddenUrlBase(base = base))
+    }
+
     override fun openSettings() {
         ShowSettingsUtil.getInstance().showSettingsDialog(project, BetterLogcatConfigurable::class.java)
     }
@@ -523,6 +534,7 @@ class IdeLogcatPopups(
             onOpenIdeSettings = ::openSettings,
             onEditAlias = ::editAlias,
             onAddAlias = ::addAlias,
+            onAddUrlBase = ::addHiddenUrlBase,
         )
         viewSettings = dialog
         dialog.show()
@@ -665,6 +677,23 @@ class IdeLogcatPopups(
         if (state().openedFileName.isNotEmpty()) {
             group.addSeparator()
             group.add(action(text = BetterLogcatBundle.message("file.backToLive")) { onIntent(LogcatIntent.CloseLogFile) })
+        }
+        showMenu(
+            at = at,
+            group = group,
+        )
+    }
+
+    override fun showNetworkCallMenu(
+        call: NetworkCall,
+        at: Point,
+    ) {
+        val group = DefaultActionGroup()
+        group.add(action(text = BetterLogcatBundle.message("network.copyPath")) { copyText(text = call.path) })
+        group.add(action(text = BetterLogcatBundle.message("network.copyUrl")) { copyText(text = call.url) })
+        val request = state().entries.firstOrNull { it.id == call.requestEntryId }
+        request?.let { CurlBuilder.fromMessage(message = it.message) }?.let { curl ->
+            group.add(action(text = BetterLogcatBundle.message("menu.copyCurl")) { copyText(text = curl) })
         }
         showMenu(
             at = at,

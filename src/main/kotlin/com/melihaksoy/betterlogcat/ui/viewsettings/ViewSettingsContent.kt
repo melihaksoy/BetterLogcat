@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
+import com.melihaksoy.betterlogcat.format.UrlShortener
 import com.melihaksoy.betterlogcat.model.HighlightRule
 import com.melihaksoy.betterlogcat.model.LogColumn
 import com.melihaksoy.betterlogcat.model.LogLevel
@@ -58,15 +59,18 @@ internal fun ViewSettingsContent(
     levelColors: Map<LogLevel, Long>,
     highlightRules: List<HighlightRule>,
     presetHighlights: PresetHighlights,
+    hiddenUrlBases: List<String>,
     onIntent: (LogcatIntent) -> Unit,
     onOpenIdeSettings: () -> Unit,
     onEditAlias: (String) -> Unit,
     onAddAlias: () -> Unit,
+    onAddUrlBase: () -> Unit,
     onPickColor: (initial: Long, onPicked: (Long) -> Unit) -> Unit,
 ) {
     val baseColors = rememberLogColors()
     val colors = remember(baseColors, levelColors) { baseColors.withLevelColors(overrides = levelColors) }
     val keywords = remember(highlightRules, presetHighlights) { KeywordHighlighter(rules = presetHighlights.rules() + highlightRules) }
+    val urls = remember(hiddenUrlBases) { UrlShortener(bases = hiddenUrlBases) }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -139,12 +143,19 @@ internal fun ViewSettingsContent(
                     onEditAlias = onEditAlias,
                     onAddAlias = onAddAlias,
                 )
+                HiddenUrlSection(
+                    hiddenUrlBases = hiddenUrlBases,
+                    colors = colors,
+                    onIntent = onIntent,
+                    onAddUrlBase = onAddUrlBase,
+                )
             }
         }
         Preview(
             viewOptions = viewOptions,
             colors = colors,
             keywords = keywords,
+            urls = urls,
         )
         Text(
             text = BetterLogcatBundle.message("viewPanel.hint"),
@@ -393,12 +404,52 @@ private fun AliasSection(
     }
 }
 
+@Composable
+private fun HiddenUrlSection(
+    hiddenUrlBases: List<String>,
+    colors: LogColors,
+    onIntent: (LogcatIntent) -> Unit,
+    onAddUrlBase: () -> Unit,
+) {
+    Section(title = BetterLogcatBundle.message("hiddenUrls.title")) {
+        Text(
+            text = BetterLogcatBundle.message("hiddenUrls.summary"),
+            color = colors.muted,
+        )
+        hiddenUrlBases.forEach { base ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
+            ) {
+                Text(
+                    text = base,
+                    modifier = Modifier.weight(
+                        weight = 1f,
+                        fill = false,
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Link(
+                    text = BetterLogcatBundle.message("hiddenUrls.remove"),
+                    onClick = { onIntent(LogcatIntent.RemoveHiddenUrlBase(base = base)) },
+                )
+            }
+        }
+        Link(
+            text = BetterLogcatBundle.message("hiddenUrls.add"),
+            onClick = onAddUrlBase,
+        )
+    }
+}
+
 /** Sample rows drawn with the real row composable, so the preview matches the log exactly. */
 @Composable
 private fun Preview(
     viewOptions: ViewOptionsUiModel,
     colors: LogColors,
     keywords: KeywordHighlighter,
+    urls: UrlShortener,
 ) {
     val shape = RoundedCornerShape(size = 4.dp)
     Column(verticalArrangement = Arrangement.spacedBy(space = 4.dp)) {
@@ -435,6 +486,7 @@ private fun Preview(
                         viewOptions = viewOptions,
                         highlighter = SearchHighlighter.None,
                         keywords = keywords,
+                        urls = urls,
                         colors = colors,
                         textStyle = JewelTheme.editorTextStyle,
                         isStacked = false,
@@ -519,10 +571,12 @@ private fun PreviewViewSettingsContent() {
             levelColors = emptyMap(),
             highlightRules = emptyList(),
             presetHighlights = PresetHighlights(),
+            hiddenUrlBases = emptyList(),
             onIntent = {},
             onOpenIdeSettings = {},
             onEditAlias = {},
             onAddAlias = {},
+            onAddUrlBase = {},
             onPickColor = { _, _ -> },
         )
     }
@@ -544,10 +598,12 @@ private fun PreviewViewSettingsContentCompact() {
             levelColors = emptyMap(),
             highlightRules = emptyList(),
             presetHighlights = PresetHighlights(),
+            hiddenUrlBases = emptyList(),
             onIntent = {},
             onOpenIdeSettings = {},
             onEditAlias = {},
             onAddAlias = {},
+            onAddUrlBase = {},
             onPickColor = { _, _ -> },
         )
     }

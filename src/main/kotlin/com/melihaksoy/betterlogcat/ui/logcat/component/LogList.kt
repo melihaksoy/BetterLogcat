@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -71,6 +72,7 @@ import com.intellij.openapi.util.SystemInfo
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
 import com.melihaksoy.betterlogcat.format.CopyMode
 import com.melihaksoy.betterlogcat.format.StackFrame
+import com.melihaksoy.betterlogcat.format.UrlShortener
 import com.melihaksoy.betterlogcat.ide.PackageAliasStore
 import com.melihaksoy.betterlogcat.model.HighlightRule
 import com.melihaksoy.betterlogcat.model.LogColumn
@@ -199,6 +201,7 @@ internal fun LogList(
         emptyList()
     }
     val keywords = remember(state.highlightRules, findRule) { KeywordHighlighter(rules = state.highlightRules + findRule) }
+    val urls = remember(state.hiddenUrlBases) { UrlShortener(bases = state.hiddenUrlBases) }
     val labels = remember { messageLabels() }
     val levelTextColors = LogLevel.entries.associateWith {
         messageColor(
@@ -213,6 +216,7 @@ internal fun LogList(
         fullyShownIds = fullyShownIds,
         highlighter = highlighter,
         keywords = keywords,
+        urls = urls,
         colors = colors,
         levelTextColors = levelTextColors,
         labels = labels,
@@ -307,6 +311,19 @@ internal fun LogList(
         state = state,
         layout = layout,
     )
+    val itemHeights = rememberItemHeights(listState = listState)
+    // Where a split message goes once text selection mode shows it as one item. Applied after the
+    // joined layout composes: a scroll before that measures the old pieces.
+    val pendingJoin = remember { PendingJoin() }
+    SideEffect {
+        val join = pendingJoin.position ?: return@SideEffect
+        if (layout.chunked[join.entryIndex] != null) return@SideEffect
+        pendingJoin.position = null
+        listState.requestScrollToItem(
+            index = join.item,
+            scrollOffset = join.offset,
+        )
+    }
 
     var boxCoordinates by remember { mutableStateOf<LayoutCoordinates?>(value = null) }
     BoxWithConstraints(
@@ -493,15 +510,24 @@ internal fun LogList(
                                 if (isToggle || isExtend) return@awaitEachGesture
                                 if (clicks.isDoubleClick(id = entry.id, timeMillis = down.uptimeMillis)) {
                                     val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+                                    val cell = if (ref.chunk > 0) SelectableCell.MESSAGE else cellAt(
+                                        x = down.position.x,
+                                        yInRow = down.position.y - (item?.offset ?: 0).toFloat(),
+                                        viewOptions = currentState.viewOptions,
+                                        isStacked = currentIsStacked,
+                                        density = this,
+                                    )
+                                    if (cell == SelectableCell.MESSAGE) {
+                                        pendingJoin.position = joinedEntryPosition(
+                                            listState = listState,
+                                            layout = currentLayout,
+                                            entryIndex = ref.entryIndex,
+                                            itemHeights = itemHeights,
+                                        )
+                                    }
                                     textSelection = TextSelectionUiModel(
                                         entryId = entry.id,
-                                        cell = if (ref.chunk > 0) SelectableCell.MESSAGE else cellAt(
-                                            x = down.position.x,
-                                            yInRow = down.position.y - (item?.offset ?: 0).toFloat(),
-                                            viewOptions = currentState.viewOptions,
-                                            isStacked = currentIsStacked,
-                                            density = this,
-                                        ),
+                                        cell = cell,
                                     )
                                     return@awaitEachGesture
                                 }
@@ -541,8 +567,10 @@ internal fun LogList(
                         count = layout.itemCount,
                         key = { item ->
                             val ref = layout.itemAt(item = item)
-                            val id = layout.entries[ref.entryIndex].id
-                            if (ref.chunk == 0) id else "$id:${ref.chunk}"
+                            itemKey(
+                                id = layout.entries[ref.entryIndex].id,
+                                chunk = ref.chunk,
+                            )
                         },
                         contentType = { item -> if (layout.itemAt(item = item).chunk == 0) 0 else 1 },
                     ) { item ->
@@ -592,6 +620,7 @@ internal fun LogList(
                                 ),
                                 isSelected = isSelected,
                                 keywords = keywords,
+                                urls = urls,
                                 isFullyShown = entry.id in fullyShownIds,
                                 onShowAll = { fullyShownIds = fullyShownIds + entry.id },
                                 messageOverride = pieces?.first(),
@@ -753,6 +782,68 @@ private fun rememberFollowMode(
         if (isFollowing && itemCount > 0) listState.scrollToItem(index = itemCount - 1)
     }
     return isFollowing
+}
+
+private fun itemKey(
+    id: Long,
+    chunk: Int,
+): Any = if (chunk == 0) id else "$id:$chunk"
+
+/** Heights of list items seen on screen, by key. Pieces of a big message scrolled past are in here. */
+@Composable
+private fun rememberItemHeights(listState: LazyListState): Map<Any, Int> {
+    val heights = remember { HashMap<Any, Int>() }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.key to it.size } }.collect { visible ->
+            if (heights.size > MAX_KNOWN_HEIGHTS) heights.clear()
+            visible.forEach { (key, size) -> heights[key] = size }
+        }
+    }
+    return heights
+}
+
+private class PendingJoin {
+    var position: JoinPosition? = null
+}
+
+private data class JoinPosition(
+    val entryIndex: Int,
+    val item: Int,
+    val offset: Int,
+)
+
+/**
+ * Text selection mode shows a split message as one item. When the list sits inside that message, the
+ * piece it is anchored to goes away and the list jumped to other rows. This is the item and scroll offset
+ * that put the joined item where the pieces were: scrolled down by the pieces above the first one on
+ * screen. Unknown piece heights count as the average. Null when the list does not sit inside the message.
+ */
+private fun joinedEntryPosition(
+    listState: LazyListState,
+    layout: LogListLayout,
+    entryIndex: Int,
+    itemHeights: Map<Any, Int>,
+): JoinPosition? {
+    val first = listState.layoutInfo.visibleItemsInfo.firstOrNull() ?: return null
+    val ref = layout.itemAt(item = first.index)
+    if (ref.entryIndex != entryIndex || ref.chunk == 0) return null
+    val id = layout.entries[entryIndex].id
+    val heights = (0 until ref.chunk).map { chunk ->
+        itemHeights[
+            itemKey(
+                id = id,
+                chunk = chunk,
+            ),
+        ]
+    }
+    val known = heights.filterNotNull()
+    val fallback = if (known.isEmpty()) first.size else known.sum() / known.size
+    val above = heights.sumOf { it ?: fallback }
+    return JoinPosition(
+        entryIndex = entryIndex,
+        item = layout.firstItemOf(entryIndex = entryIndex),
+        offset = above - first.offset,
+    )
 }
 
 /** Keeps the keyboard lead row on screen. */
@@ -937,6 +1028,7 @@ private data class PieceKey(
     val prettyJson: Boolean,
     val highlighter: SearchHighlighter,
     val keywords: KeywordHighlighter,
+    val urls: UrlShortener,
     val colors: LogColors,
     val textColor: Color,
 )
@@ -948,6 +1040,7 @@ private fun buildLayout(
     fullyShownIds: Set<Long>,
     highlighter: SearchHighlighter,
     keywords: KeywordHighlighter,
+    urls: UrlShortener,
     colors: LogColors,
     levelTextColors: Map<LogLevel, Color>,
     labels: MessageLabels,
@@ -969,6 +1062,7 @@ private fun buildLayout(
                 prettyJson = state.viewOptions.prettyJson,
                 highlighter = highlighter,
                 keywords = keywords,
+                urls = urls,
                 colors = colors,
                 textColor = textColor,
             ),
@@ -983,6 +1077,7 @@ private fun buildLayout(
                     colors = colors,
                     highlighter = highlighter,
                     keywords = keywords,
+                    urls = urls,
                     labels = labels,
                     onOpenFrame = onOpenFrame,
                     onOpenUrl = { BrowserUtil.browse(it) },
@@ -1000,6 +1095,7 @@ private fun buildLayout(
 }
 
 private const val SPLIT_MIN_CHARS = 2_000
+private const val MAX_KNOWN_HEIGHTS = 4_000
 private const val FIND_DEBOUNCE_MILLIS = 120L
 private const val FIND_REFRESH_MILLIS = 400L
 private const val FIND_COLOR = 0xFFFF9F1AL

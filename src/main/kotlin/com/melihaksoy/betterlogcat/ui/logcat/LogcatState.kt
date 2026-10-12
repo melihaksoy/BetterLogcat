@@ -43,6 +43,8 @@ data class LogcatState(
     /** The user's own keywords, for the settings window. */
     val ownHighlightRules: List<HighlightRule> = emptyList(),
     val presetHighlights: PresetHighlights = PresetHighlights(),
+    /** Base URLs the log hides, so a link shows only its path. Visual only. */
+    val hiddenUrlBases: List<String> = emptyList(),
     /** The user's own tag descriptions, by tag. Built-in ones are in [TagDescriptions]. */
     val tagNotes: Map<String, String> = emptyMap(),
     /** Tag groups the user made in the Tags panel. */
