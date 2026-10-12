@@ -4,6 +4,7 @@ import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileChooser.FileChooser
@@ -838,7 +839,15 @@ class IdeLogcatPopups(
             .setFilterAlwaysVisible(true)
             .setItemChosenCallback { onChosen(it) }
         if (selected != null) builder.setSelectedValue(selected, true)
-        builder.createPopup().show(RelativePoint(owner(), at))
+        showLater { builder.createPopup().show(RelativePoint(owner(), at)) }
+    }
+
+    /**
+     * Shows a popup after the click that asked for it is done. Shown during the click, the Compose panel
+     * takes the focus back when it finishes the click, and the popup's search field gets no typing.
+     */
+    private fun showLater(show: () -> Unit) {
+        ApplicationManager.getApplication().invokeLater({ if (owner().isShowing) show() }, project.disposed)
     }
 
     /** An IDE list popup, the same kind as the pickers. A Swing JPopupMenu did not show over the Compose panel. */
@@ -854,7 +863,7 @@ class IdeLogcatPopups(
                 JBPopupFactory.ActionSelectionAid.SPEEDSEARCH,
                 true,
             )
-            .show(RelativePoint(owner(), at))
+            .let { popup -> showLater { popup.show(RelativePoint(owner(), at)) } }
     }
 
     private fun action(

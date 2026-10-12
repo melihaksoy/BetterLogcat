@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.12.3
+- Fixed: typing in the device and package pickers' search field did nothing; the popup now gets the focus.
+
 ## 0.12.2
 - Signed release of 0.12.1 (0.12.1 went to the Marketplace unsigned).
 
