@@ -18,15 +18,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '25'
 
       # Caches Gradle and the downloaded Android Studio between runs.
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       # No local Studio here: Gradle downloads Android Studio `platformVersion` from gradle.properties.
       - name: Test and build
@@ -35,7 +35,7 @@ jobs:
       - name: Verify against Android Studio
         run: ./gradlew verifyPlugin -PverifyAndroidStudioVersions="$(grep '^platformVersion=' gradle.properties | cut -d= -f2)"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: better-logcat-zip
           path: build/distributions/*.zip
