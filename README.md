@@ -101,14 +101,10 @@ JDK 25 is needed (Android Studio 2026.2 ships Java 25 bytecode).
 Always compile against the oldest supported Studio: newer builds add Jewel overloads that older ones lack.
 The zip lands in `build/distributions/`. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
-## Publish
+## Releasing
 
-Signing and publishing read secrets from environment variables, never from the repository:
-`CERTIFICATE_CHAIN`, `PRIVATE_KEY`, `PRIVATE_KEY_PASSWORD` and `PUBLISH_TOKEN`.
-
-```bash
-./gradlew signPlugin publishPlugin -PlocalPlatformPath="<oldest>"
-```
+Push a version tag; GitHub Actions does the rest (sign, publish to JetBrains Marketplace, GitHub release with
+the signed zip). See [CONTRIBUTING.md › Releasing](CONTRIBUTING.md#releasing).
 
 ## License
 

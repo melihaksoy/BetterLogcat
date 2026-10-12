@@ -1,0 +1,72 @@
+# Publishes a release when a version tag is pushed, for example `git tag v0.12.1 && git push origin v0.12.1`.
+# It signs the plugin, uploads it to JetBrains Marketplace, and creates a GitHub release with the signed zip
+# and the version's CHANGELOG.md section as notes.
+#
+# Secrets live in the `release` environment (Settings › Environments), so only this job can read them:
+#   CERTIFICATE_CHAIN     base64 of chain.crt
+#   PRIVATE_KEY           base64 of private_encrypted.pem
+#   PRIVATE_KEY_PASSWORD  the key's password
+#   PUBLISH_TOKEN         JetBrains Marketplace token (plugins.jetbrains.com › My Tokens)
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches pluginVersion
+        run: |
+          version="$(grep '^pluginVersion=' gradle.properties | cut -d= -f2)"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match pluginVersion=$version in gradle.properties"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Test
+        run: ./gradlew test
+
+      # publishPlugin runs signPlugin first when the key and certificate are set.
+      - name: Sign and publish to JetBrains Marketplace
+        run: ./gradlew publishPlugin
+        env:
+          CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
+          PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v version="$VERSION" '
+            $0 == "## " version { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::error::CHANGELOG.md has no '## $VERSION' section"
+            exit 1
+          fi
+
+      - name: GitHub release with the signed zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" build/distributions/better-logcat-"$VERSION"-signed.zip \
+            --title "Better Logcat $VERSION" \
+            --notes-file release-notes.md

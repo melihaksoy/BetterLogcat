@@ -37,6 +37,33 @@ RENDER_DIR=/some/dir ./gradlew test --tests '*RenderProbeTest*' -PlocalPlatformP
 
 The screenshots in `docs/images` come from it (`RENDER_DIR=$PWD/docs/images`).
 
+## Continuous integration
+
+`.github/workflows/build.yml` runs on every push to `main` and every pull request: tests, plugin zip, and the
+Plugin Verifier against the Android Studio in `platformVersion`. The zip is attached to the run as an artifact.
+
+## Releasing
+
+1. Set `pluginVersion` in `gradle.properties` and add a `## <version>` section to `CHANGELOG.md`.
+2. Commit, then tag and push: `git tag v0.12.1 && git push origin main v0.12.1`.
+3. `.github/workflows/release.yml` checks that the tag matches `pluginVersion`, runs the tests, signs the
+   plugin, publishes it to JetBrains Marketplace, and creates a GitHub release with the signed zip and the
+   changelog section as notes.
+
+The signing key and tokens are secrets of the `release` environment (Settings › Environments › release), so
+only the release job can read them, and pull requests from forks never see them:
+
+| Secret | Value |
+|---|---|
+| `CERTIFICATE_CHAIN` | base64 of `chain.crt` |
+| `PRIVATE_KEY` | base64 of the encrypted private key (`private_encrypted.pem`) |
+| `PRIVATE_KEY_PASSWORD` | the private key's password |
+| `PUBLISH_TOKEN` | a JetBrains Marketplace token (plugins.jetbrains.com › My Tokens) |
+
+Keys and certificates never go in the repository (`.gitignore` blocks `*.pem`, `*.crt`, `*.p12`, `*.jks`).
+
+To sign by hand instead, export the same four variables and run `./gradlew signPlugin` (or `publishPlugin`).
+
 ## Code layout
 
 | Folder | What |

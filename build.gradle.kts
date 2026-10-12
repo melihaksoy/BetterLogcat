@@ -1,3 +1,4 @@
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -68,10 +69,14 @@ intellijPlatform {
         ides {
             // Comma-separated local installs, e.g. the oldest and newest supported Studio.
             val paths = providers.gradleProperty("verifyPlatformPaths").orNull
-            if (paths.isNullOrBlank()) {
-                recommended()
-            } else {
-                paths.split(',').map { it.trim() }.filter { it.isNotEmpty() }.forEach { local(it) }
+            // Comma-separated Android Studio versions to download, for CI (no local install there).
+            val versions = providers.gradleProperty("verifyAndroidStudioVersions").orNull
+            when {
+                !paths.isNullOrBlank() -> paths.split(',').map { it.trim() }.filter { it.isNotEmpty() }.forEach { local(it) }
+                !versions.isNullOrBlank() -> versions.split(',').map { it.trim() }.filter { it.isNotEmpty() }.forEach {
+                    create(IntelliJPlatformType.AndroidStudio, it)
+                }
+                else -> recommended()
             }
         }
     }

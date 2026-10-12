@@ -9,3 +9,9 @@ local.properties
 .intellijPlatform/
 .claude/
 CLAUDE.md
+
+# Signing keys and certificates: never commit them.
+*.pem
+*.crt
+*.p12
+*.jks
