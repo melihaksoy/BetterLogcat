@@ -60,6 +60,14 @@ only the release job can read them, and pull requests from forks never see them:
 | `PRIVATE_KEY_PASSWORD` | the private key's password |
 | `PUBLISH_TOKEN` | a JetBrains Marketplace token (plugins.jetbrains.com › My Tokens) |
 
+Who can release:
+
+- **Tags:** the "Release tags" ruleset lets only repository admins create, move or delete `v*` tags. Add
+  people or teams to its bypass list (Settings › Rules › Rulesets) to let them release.
+- **main:** the "Protect main" ruleset requires a pull request with one approval and a green `build` check;
+  no force pushes or deletion. Admins can bypass it.
+- **The workflow:** a release stops unless the tagged commit is already on `main`, so only merged code ships.
+
 Keys and certificates never go in the repository (`.gitignore` blocks `*.pem`, `*.crt`, `*.p12`, `*.jks`).
 
 To sign by hand instead, export the same four variables and run `./gradlew signPlugin` (or `publishPlugin`).

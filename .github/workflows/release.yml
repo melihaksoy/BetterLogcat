@@ -22,6 +22,17 @@ jobs:
     environment: release
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history, so the next step can tell whether the tagged commit is on main.
+          fetch-depth: 0
+
+      # Only merged code is released: a tag on a commit that is not on main stops here.
+      - name: Check the tagged commit is on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME points to $GITHUB_SHA, which is not on main. Merge first, then tag."
+            exit 1
+          fi
 
       - name: Check the tag matches pluginVersion
         run: |
