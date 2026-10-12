@@ -1,4 +1,5 @@
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -15,6 +16,10 @@ kotlin {
     jvmToolchain(25)
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_25)
+        // No bridge methods for interface defaults: with them, every default of a platform interface
+        // (ToolWindowFactory.isApplicable, ...) looks overridden, and the Plugin Verifier reports
+        // deprecated and experimental API we never use.
+        jvmDefault.set(JvmDefaultMode.NO_COMPATIBILITY)
         optIn.add("androidx.compose.foundation.ExperimentalFoundationApi")
         optIn.add("androidx.compose.ui.ExperimentalComposeUiApi")
     }

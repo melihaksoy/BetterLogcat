@@ -111,6 +111,7 @@ data class MessageLabels(
 
 private const val JSON_PREVIEW_CHARS = 110
 private const val TEXT_PREVIEW_CHARS = 200
+private const val URL_SEPARATOR_CHARS = 5
 
 internal fun buildMessageText(
     entry: LogEntry,
@@ -245,6 +246,19 @@ private fun AnnotatedString.Builder.appendCollapsed(
         val preview = json.main.minified
         appendJsonPart(if (preview.length > JSON_PREVIEW_CHARS) preview.take(JSON_PREVIEW_CHARS) + "…" else preview)
     }
+}
+
+/** Characters in the one-line view [appendCollapsed] builds for [entry], for the sideways scroll width. */
+internal fun collapsedLength(entry: LogEntry): Int {
+    val firstLine = entry.lines.first()
+    val json = entry.json as? JsonContent.Found
+    val firstLineText = if (json != null && json.main.start < firstLine.length) firstLine.substring(0, json.main.start) else firstLine
+    var length = if (firstLineText.length > TEXT_PREVIEW_CHARS) TEXT_PREVIEW_CHARS + 1 else firstLineText.trimEnd().length
+    if (!firstLine.contains("http")) {
+        UrlFinder.find(text = entry.message.take(URL_SEARCH_CHARS)).firstOrNull()?.let { match -> length += URL_SEPARATOR_CHARS + match.end - match.start }
+    }
+    if (json != null) length += 1 + minOf(json.main.minified.length, JSON_PREVIEW_CHARS + 1)
+    return length
 }
 
 /**

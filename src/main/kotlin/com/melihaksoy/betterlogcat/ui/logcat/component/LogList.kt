@@ -2,49 +2,41 @@ package com.melihaksoy.betterlogcat.ui.logcat.component
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
-import com.melihaksoy.betterlogcat.network.NetworkCall
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.derivedStateOf
-import com.melihaksoy.betterlogcat.model.HighlightRule
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.delay
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.foundation.text.input.rememberTextFieldState
-import androidx.compose.foundation.lazy.items
-import com.melihaksoy.betterlogcat.model.LogLevel
-import com.melihaksoy.betterlogcat.format.StackFrame
-import com.intellij.ide.BrowserUtil
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -54,32 +46,41 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isCtrlPressed as isPointerCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed as isPointerMetaPressed
-import androidx.compose.ui.input.pointer.isShiftPressed as isPointerShiftPressed
-import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isShiftPressed as isPointerShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.intellij.ide.BrowserUtil
+import com.intellij.ide.CopyProvider
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.DataContext
 import com.intellij.openapi.actionSystem.PlatformDataKeys
-import com.intellij.ide.CopyProvider
 import com.intellij.openapi.util.SystemInfo
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
 import com.melihaksoy.betterlogcat.format.CopyMode
+import com.melihaksoy.betterlogcat.format.StackFrame
 import com.melihaksoy.betterlogcat.ide.PackageAliasStore
+import com.melihaksoy.betterlogcat.model.HighlightRule
+import com.melihaksoy.betterlogcat.model.LogColumn
+import com.melihaksoy.betterlogcat.model.JsonContent
 import com.melihaksoy.betterlogcat.model.LogEntry
+import com.melihaksoy.betterlogcat.model.LogLevel
+import com.melihaksoy.betterlogcat.model.TagDescriptions
+import com.melihaksoy.betterlogcat.network.NetworkCall
 import com.melihaksoy.betterlogcat.ui.logcat.LogcatIntent
 import com.melihaksoy.betterlogcat.ui.logcat.LogcatState
-import com.melihaksoy.betterlogcat.model.LogColumn
 import com.melihaksoy.betterlogcat.ui.logcat.model.SelectableCell
 import com.melihaksoy.betterlogcat.ui.logcat.model.SelectionUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.TextSelectionUiModel
@@ -88,20 +89,30 @@ import com.melihaksoy.betterlogcat.ui.logcat.preview.LogcatPreviewData
 import com.melihaksoy.betterlogcat.ui.theme.BetterLogcatPreviewTheme
 import com.melihaksoy.betterlogcat.ui.theme.LogColors
 import com.melihaksoy.betterlogcat.ui.theme.rememberLogColors
+import java.awt.Point
+import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.jetbrains.jewel.foundation.actionSystem.provideData
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.DefaultButton
+import org.jetbrains.jewel.ui.component.HorizontalScrollbar
 import org.jetbrains.jewel.ui.component.Text
 import org.jetbrains.jewel.ui.component.VerticalScrollbar
-import java.awt.Point
-import kotlin.math.roundToInt
-import com.melihaksoy.betterlogcat.model.TagDescriptions
 
 private const val DOUBLE_CLICK_MILLIS = 400L
 private val MENU_OFFSET = Offset(x = 4f, y = 4f)
 private val MIN_MESSAGE_WIDTH = 260.dp
 private const val PAGE_ROWS = 20
+
+/** Lines longer than this do not widen the sideways scroll; open the message in an editor to read them. */
+private const val MAX_SIDEWAYS_CHARS = 4_000
+private val SIDEWAYS_END_SPACE = 24.dp
 private const val CONTEXT_ALPHA = 0.5f
 
 /**
@@ -210,6 +221,40 @@ internal fun LogList(
         onShowAll = { id -> fullyShownIds = fullyShownIds + id },
     )
     val currentLayout by rememberUpdatedState(newValue = layout)
+    // Without soft-wrap, long lines scroll sideways: header and rows share one horizontal scroll.
+    val isScrollingSideways = !viewOptions.softWrap
+    val horizontalState = rememberScrollState()
+    val charWidth = with(density) {
+        rememberTextMeasurer().measure(
+            text = "0",
+            style = textStyle,
+        ).size.width.toDp()
+    }
+    // The widest line seen on screen, in characters. It only grows, so the range stays put while scrolling down.
+    var widestChars by remember(isScrollingSideways, state.filter) { mutableIntStateOf(value = 0) }
+    LaunchedEffect(listState, isScrollingSideways, state.filter) {
+        if (!isScrollingSideways) return@LaunchedEffect
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.index } }.collect { items ->
+            val shown = currentLayout
+            val widest = items.maxOfOrNull { item ->
+                val ref = shown.itemAt(item = item)
+                val entry = shown.entries.getOrNull(index = ref.entryIndex) ?: return@maxOfOrNull 0
+                val piece = shown.chunked[ref.entryIndex]?.getOrNull(index = ref.chunk)?.text
+                val json = entry.json as? JsonContent.Found
+                when {
+                    piece != null -> longestLine(text = piece)
+                    entry.isExpandable && !currentState.isExpanded(entry = entry) -> collapsedLength(entry = entry)
+                    // Pretty JSON is shorter per line than the one-line JSON in the message.
+                    json != null && currentState.viewOptions.prettyJson -> maxOf(
+                        longestLine(text = json.pretty),
+                        json.main.start.coerceAtMost(maximumValue = entry.lines.first().length),
+                    )
+                    else -> longestLine(text = entry.message)
+                }.coerceAtMost(maximumValue = MAX_SIDEWAYS_CHARS)
+            } ?: 0
+            if (widest > widestChars) widestChars = widest
+        }
+    }
     val copyProvider = remember {
         object : CopyProvider {
             override fun performCopy(dataContext: DataContext) = currentOnIntent(LogcatIntent.Copy(mode = currentState.viewOptions.defaultCopyMode))
@@ -308,8 +353,20 @@ internal fun LogList(
             if (it == LogColumn.LEVEL) it.defaultWidthDp else viewOptions.width(column = it)
         }.dp
         val messageIndentStacked = LEADING_SLOT + ROW_HORIZONTAL_PADDING
+        val contentWidth = maxOf(
+            maxWidth,
+            (if (isStacked) messageIndentStacked else messageIndent) + charWidth * widestChars + SIDEWAYS_END_SPACE,
+        )
+        val sideways = if (isScrollingSideways) {
+            Modifier
+                .horizontalScroll(state = horizontalState)
+                .width(contentWidth)
+        } else {
+            Modifier
+        }
         Column(modifier = Modifier.fillMaxSize()) {
             LogHeader(
+                modifier = sideways,
                 viewOptions = viewOptions,
                 colors = colors,
                 onResize = { column, width -> liveWidths = liveWidths + (column to width) },
@@ -324,7 +381,10 @@ internal fun LogList(
             )
             Box(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
+                    // The sideways scroll comes first, so positions below are in content coordinates.
                     modifier = Modifier
+                        .fillMaxHeight()
+                        .then(sideways)
                         .fillMaxSize()
                         .onGloballyPositioned { listCoordinates = it }
                         .provideData { set(PlatformDataKeys.COPY_PROVIDER.name, copyProvider) }
@@ -634,6 +694,14 @@ internal fun LogList(
                         .align(alignment = Alignment.CenterEnd)
                         .fillMaxHeight(),
                 )
+                if (isScrollingSideways) {
+                    HorizontalScrollbar(
+                        scrollState = horizontalState,
+                        modifier = Modifier
+                            .align(alignment = Alignment.BottomStart)
+                            .fillMaxWidth(),
+                    )
+                }
                 // Only with logs below the view. Follow mode can stop while the list is already at its end (a
                 // selected row, a filter that made it shorter); then there is nothing to jump to, and following
                 // only comes back once the end is reached again, so the button would never go away.
@@ -805,6 +873,18 @@ private fun handleKey(
     }
     onIntent(intent)
     return true
+}
+
+/** Characters in the longest line of [text], up to [MAX_SIDEWAYS_CHARS]. */
+private fun longestLine(text: String): Int {
+    var longest = 0
+    var start = 0
+    while (start <= text.length && longest < MAX_SIDEWAYS_CHARS) {
+        val end = text.indexOf(char = '\n', startIndex = start).let { if (it < 0) text.length else it }
+        longest = maxOf(longest, end - start)
+        start = end + 1
+    }
+    return longest.coerceAtMost(maximumValue = MAX_SIDEWAYS_CHARS)
 }
 
 /** Which cell sits at [x] in a row. In stacked rows the message is below the first line. */

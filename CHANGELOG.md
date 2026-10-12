@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.12.1
+- With soft-wrap off, long lines scroll sideways (Shift+wheel, trackpad or the scrollbar); the column
+  header scrolls with them.
+- No more deprecated tool window API warnings in the Plugin Verifier.
+
 ## 0.12.0
 - Problems panel: crashes, ANRs, exceptions, StrictMode violations and warnings, grouped with counts, per
   session (device stream, app launch). Problems stay after Clear and restarts until deleted: per problem,

@@ -395,6 +395,40 @@ class RenderProbeTest : BasePlatformTestCase() {
         }
     }
 
+    fun testRenderNoWrap() {
+        val dir = System.getenv("RENDER_DIR") ?: return
+        val base = LogcatPreviewData.logsState
+        val scene = ImageComposeScene(width = 1600, height = 800, density = Density(density = 2f)) {
+            BetterLogcatPreviewTheme {
+                LogcatContent(
+                    state = base.copy(viewOptions = base.viewOptions.copy(softWrap = false)),
+                    popups = LogcatPopups.None,
+                    paneActions = com.melihaksoy.betterlogcat.ui.logcat.pane.PaneActions.None,
+                    onIntent = {},
+                )
+            }
+        }
+        scene.render(nanoTime = 0L)
+        scene.render(nanoTime = 500_000_000L)
+        File(dir, "no-wrap.png").writeBytes(scene.render(nanoTime = 1_000_000_000L).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+        // A sideways wheel over the list (Shift+wheel or a trackpad swipe) moves header and rows together.
+        repeat(times = 30) {
+            scene.sendPointerEvent(
+                eventType = androidx.compose.ui.input.pointer.PointerEventType.Scroll,
+                position = androidx.compose.ui.geometry.Offset(x = 800f, y = 500f),
+                scrollDelta = androidx.compose.ui.geometry.Offset(x = 10f, y = 0f),
+            )
+        }
+        // Wheel scrolling animates: draw frames until it settles.
+        var frameTime = 1_000_000_000L
+        repeat(times = 120) {
+            frameTime += 16_000_000L
+            scene.render(nanoTime = frameTime)
+        }
+        File(dir, "no-wrap-scrolled.png").writeBytes(scene.render(nanoTime = frameTime + 16_000_000L).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+        scene.close()
+    }
+
     fun testRenderNarrow() {
         val dir = System.getenv("RENDER_DIR") ?: return
         render(File(dir, "narrow.png"), width = 1300, height = 500) {
