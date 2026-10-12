@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.12.2
+- Signed release of 0.12.1 (0.12.1 went to the Marketplace unsigned).
+
 ## 0.12.1
 - With soft-wrap off, long lines scroll sideways (Shift+wheel, trackpad or the scrollbar); the column
   header scrolls with them.

@@ -32,6 +32,23 @@ jobs:
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
+      # Gradle skips signing without a key or certificate and would publish an unsigned zip: stop instead.
+      - name: Check the release secrets are set
+        env:
+          CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
+          PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+        run: |
+          missing=""
+          for name in CERTIFICATE_CHAIN PRIVATE_KEY PRIVATE_KEY_PASSWORD PUBLISH_TOKEN; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets in the release environment:$missing"
+            exit 1
+          fi
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -42,9 +59,12 @@ jobs:
       - name: Test
         run: ./gradlew test
 
-      # publishPlugin runs signPlugin first when the key and certificate are set.
+      # Sign first and check the signed zip exists, so an unsigned zip is never published.
       - name: Sign and publish to JetBrains Marketplace
-        run: ./gradlew publishPlugin
+        run: |
+          ./gradlew signPlugin
+          test -f "build/distributions/better-logcat-$VERSION-signed.zip" || { echo "::error::No signed zip was built"; exit 1; }
+          ./gradlew publishPlugin
         env:
           CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
