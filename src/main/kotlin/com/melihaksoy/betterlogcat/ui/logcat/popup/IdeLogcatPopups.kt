@@ -198,7 +198,7 @@ class IdeLogcatPopups(
         if (processName.isNotEmpty()) {
             group.add(action(text = BetterLogcatBundle.message("menu.setAlias", processName)) { editAlias(packageName = processName) })
         }
-        if (selected.any { it.isExpandable }) {
+        if (selected.any { current.viewOptions.isExpandable(entry = it) }) {
             group.addSeparator()
             group.add(action(text = BetterLogcatBundle.message("menu.expand")) { onIntent(LogcatIntent.SetSelectionExpanded(isExpanded = true)) })
             group.add(action(text = BetterLogcatBundle.message("menu.collapse")) { onIntent(LogcatIntent.SetSelectionExpanded(isExpanded = false)) })

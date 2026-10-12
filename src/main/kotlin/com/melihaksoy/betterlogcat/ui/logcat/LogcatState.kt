@@ -80,5 +80,8 @@ data class LogcatState(
     val selectedDevice: Device?
         get() = devices.firstOrNull { it.serial == selectedSerial }
 
-    fun isExpanded(entry: LogEntry): Boolean = entry.isExpandable && (viewOptions.isExpandedByDefault(entry = entry) xor (entry.id in toggledIds))
+    fun isExpanded(entry: LogEntry): Boolean = viewOptions.isExpanded(
+        entry = entry,
+        isToggled = entry.id in toggledIds,
+    )
 }

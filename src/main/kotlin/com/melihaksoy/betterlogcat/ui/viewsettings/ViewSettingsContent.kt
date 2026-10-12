@@ -482,7 +482,10 @@ private fun Preview(
                         previous = entries.getOrNull(index = index - 1),
                         processName = ViewSettingsSamples.processNames[entry.pid].orEmpty(),
                         isSelected = false,
-                        isExpanded = viewOptions.isExpandedByDefault(entry = entry) && entry.isExpandable,
+                        isExpanded = viewOptions.isExpanded(
+                            entry = entry,
+                            isToggled = false,
+                        ),
                         viewOptions = viewOptions,
                         highlighter = SearchHighlighter.None,
                         keywords = keywords,

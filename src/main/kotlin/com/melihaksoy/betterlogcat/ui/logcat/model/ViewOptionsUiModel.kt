@@ -49,6 +49,23 @@ data class ViewOptionsUiModel(
     fun isExpandedByDefault(entry: LogEntry): Boolean =
         if (entry.json is JsonContent.Found || entry.isLong) expandJsonByDefault else expandByDefault
 
+    /**
+     * Expand shows more of [entry]. Without soft wrap, one long line without JSON has nothing more to show:
+     * it shows whole and scrolls sideways, with no expand toggle.
+     */
+    fun isExpandable(entry: LogEntry): Boolean =
+        entry.isExpandable && (softWrap || entry.lines.size > 1 || entry.json is JsonContent.Found)
+
+    /** [isToggled]: the user flipped this entry away from its default. */
+    fun isExpanded(
+        entry: LogEntry,
+        isToggled: Boolean,
+    ): Boolean = when {
+        !entry.isExpandable -> false
+        !isExpandable(entry = entry) -> true
+        else -> isExpandedByDefault(entry = entry) xor isToggled
+    }
+
     val defaultCopyMode: CopyMode
         get() = if (copyMessageOnly) CopyMode.MESSAGE else CopyMode.FULL
 

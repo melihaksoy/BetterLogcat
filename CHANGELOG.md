@@ -6,6 +6,10 @@
   actions under the address.
 - Hidden base URLs (view settings): links in log messages show without the base; a click opens the full URL.
 - Fixed: a double-click into a long expanded message no longer moves the log.
+- Fixed: with soft-wrap off, a long one-line message showed Expand/Collapse that changed nothing. It now
+  shows whole and scrolls sideways.
+- Tags panel: a click on "Your app" or "Other" folds the section. New app tags and busier tags now show
+  at once, without closing and opening the panel.
 
 ## 0.12.2
 - Signed release of 0.12.1 (0.12.1 went to the Marketplace unsigned).

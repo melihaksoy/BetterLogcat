@@ -137,6 +137,7 @@ internal fun LogRow(
             MessageCell(
                 modifier = Modifier.padding(start = LEADING_SLOT),
                 entry = entry,
+                isExpandable = viewOptions.isExpandable(entry = entry),
                 isExpanded = isExpanded || selectedCell == SelectableCell.MESSAGE,
                 isTextSelecting = selectedCell == SelectableCell.MESSAGE,
                 isSingleLine = singleLine,
@@ -178,6 +179,7 @@ internal fun LogRow(
             MessageCell(
                 modifier = Modifier.weight(1f),
                 entry = entry,
+                isExpandable = viewOptions.isExpandable(entry = entry),
                 isExpanded = isExpanded || selectedCell == SelectableCell.MESSAGE,
                 isTextSelecting = selectedCell == SelectableCell.MESSAGE,
                 isSingleLine = singleLine,
@@ -238,7 +240,7 @@ private fun HeaderCells(
             onClick = onGutterClick,
         )
         ExpandToggle(
-            isExpandable = entry.isExpandable,
+            isExpandable = viewOptions.isExpandable(entry = entry),
             isExpanded = isExpanded,
             onToggle = onToggleExpanded,
         )
@@ -409,6 +411,7 @@ internal fun LevelBadge(
 private fun MessageCell(
     modifier: Modifier = Modifier,
     entry: LogEntry,
+    isExpandable: Boolean,
     isExpanded: Boolean,
     isTextSelecting: Boolean,
     isSingleLine: Boolean,
@@ -471,7 +474,7 @@ private fun MessageCell(
             )
         }
         // Split big messages continue below this row; their sticky header carries the same actions.
-        if (entry.isExpandable && !isTextSelecting && textOverride == null) {
+        if (isExpandable && !isTextSelecting && textOverride == null) {
             MessageFooter(
                 entry = entry,
                 isExpanded = isExpanded,

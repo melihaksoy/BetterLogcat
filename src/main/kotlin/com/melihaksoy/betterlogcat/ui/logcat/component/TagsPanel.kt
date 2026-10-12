@@ -32,6 +32,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,6 +68,7 @@ import com.melihaksoy.betterlogcat.ui.logcat.LogcatIntent
 import com.melihaksoy.betterlogcat.ui.logcat.model.SidePanel
 import com.melihaksoy.betterlogcat.ui.logcat.model.TagNodeUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.TagSection
+import com.melihaksoy.betterlogcat.ui.logcat.model.TagSectionUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.TagSelectionUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.TagTree
 import com.melihaksoy.betterlogcat.ui.logcat.preview.LogcatPreviewData
@@ -129,10 +132,13 @@ internal fun TagsPanel(
     val hiddenCount = tagCounts.keys.count { !tagMatcher.isTagVisible(tag = it) }
     // Folded by default: a group is there to put noise away. A search opens every group it shows.
     var expandedGroups by remember { mutableStateOf(value = emptySet<String>()) }
+    // Sections are open by default. A search opens every section, like groups.
+    var collapsedSections by remember { mutableStateOf(value = emptySet<TagSection>()) }
+    val isSectionOpen = { section: TagSection -> section !in collapsedSections || query.isNotEmpty() }
     var selection by remember { mutableStateOf(value = TagSelectionUiModel()) }
     var dragged by remember { mutableStateOf<TagDrag?>(value = null) }
     // The tag rows on screen, top to bottom: for Shift ranges and for what a drag moves.
-    val rows = sections.flatMap { section ->
+    val rows = sections.filter { isSectionOpen(it.section) }.flatMap { section ->
         section.nodes.flatMap { node ->
             when (node) {
                 is TagNodeUiModel.Tag -> listOf(node.name)
@@ -291,6 +297,16 @@ internal fun TagsPanel(
             )
         } else {
             val listState = rememberLazyListState()
+            // Rows are keyed by tag, so the list keeps its top row in place when rows land above it: the
+            // "Your app" section when the app starts, or a tag that got busier. A list at the top stays at
+            // the top, so those rows show. Read before the new rows measure.
+            val isAtTop by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0 } }
+            val shownSections = remember { ShownSections() }
+            val keepsTop = isAtTop && shownSections.value != sections
+            shownSections.value = sections
+            SideEffect {
+                if (keepsTop) listState.requestScrollToItem(index = 0)
+            }
             // Rows keep a chevron slot only when a group shows, so a panel without groups stays as it was.
             val hasGroups = sections.any { section -> section.nodes.any { it is TagNodeUiModel.Group } }
             val slot = if (hasGroups) CHEVRON_SLOT else 0.dp
@@ -357,6 +373,7 @@ internal fun TagsPanel(
                     state = listState,
                 ) {
                     sections.forEach { section ->
+                        val isOpen = isSectionOpen(section.section)
                         if (section.section != TagSection.ALL) {
                             item(key = HEADER_KEY_PREFIX + section.section.name) {
                                 GroupHeaderRow(
@@ -364,7 +381,15 @@ internal fun TagsPanel(
                                         if (section.section == TagSection.APP) "tags.group.app" else "tags.group.other",
                                         section.tags.size,
                                     ),
+                                    isExpanded = isOpen,
                                     colors = colors,
+                                    onToggleExpanded = {
+                                        collapsedSections = if (section.section in collapsedSections) {
+                                            collapsedSections - section.section
+                                        } else {
+                                            collapsedSections + section.section
+                                        }
+                                    },
                                     onShowAll = {
                                         onIntent(
                                             LogcatIntent.SetTagsVisible(
@@ -384,6 +409,7 @@ internal fun TagsPanel(
                                 )
                             }
                         }
+                        if (!isOpen) return@forEach
                         section.nodes.forEach { node ->
                             when (node) {
                                 is TagNodeUiModel.Tag -> item(key = node.name) {
@@ -504,6 +530,11 @@ internal fun TagsPanel(
             }
         }
     }
+}
+
+/** The sections the list last composed. Plain, not state: a change must not compose again. */
+private class ShownSections {
+    var value: List<TagSectionUiModel>? = null
 }
 
 /** Tags on the move: where the pointer is and what is under it. */
@@ -671,10 +702,13 @@ private fun TagGroupRow(
     }
 }
 
+/** "Your app" or "Other": a click folds the section. The links show or hide all its tags. */
 @Composable
 private fun GroupHeaderRow(
     title: String,
+    isExpanded: Boolean,
     colors: LogColors,
+    onToggleExpanded: () -> Unit,
     onShowAll: () -> Unit,
     onHideAll: () -> Unit,
 ) {
@@ -682,13 +716,25 @@ private fun GroupHeaderRow(
         modifier = Modifier
             .fillMaxWidth()
             .background(color = colors.headerBackground)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onToggleExpanded,
+            )
             .padding(
-                horizontal = 10.dp,
-                vertical = 4.dp,
+                start = ROW_START,
+                end = 10.dp,
+                top = 4.dp,
+                bottom = 4.dp,
             ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(space = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(space = ROW_GAP),
     ) {
+        Icon(
+            key = if (isExpanded) AllIconsKeys.General.ChevronDown else AllIconsKeys.General.ChevronRight,
+            contentDescription = BetterLogcatBundle.message(if (isExpanded) "tags.group.collapse" else "tags.group.expand"),
+            modifier = Modifier.width(CHEVRON_SLOT),
+        )
         Text(
             text = title,
             modifier = Modifier.weight(1f),
