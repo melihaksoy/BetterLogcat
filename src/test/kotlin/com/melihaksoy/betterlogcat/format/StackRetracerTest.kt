@@ -8,9 +8,9 @@ import java.nio.file.Files
 class StackRetracerTest {
 
     private val mapping = """
-        com.vintagegarage.listing.ListingRepository -> a.b:
+        com.example.pokedex.data.PokemonRepository -> a.b:
             1:1:void load(java.lang.String):58:58 -> c
-        com.vintagegarage.listing.ListingViewModel -> a.d:
+        com.example.pokedex.ui.PokemonViewModel -> a.d:
             1:1:void refresh():31:31 -> e
     """.trimIndent()
 
@@ -21,11 +21,11 @@ class StackRetracerTest {
         val retracer = StackRetracer.load(mappingFile = file)
 
         val result = retracer.retrace(
-            message = "java.lang.IllegalStateException: Listing id must not be blank\n\tat a.b.c(SourceFile:1)\n\tat a.d.e(SourceFile:1)",
+            message = "java.lang.IllegalStateException: Pokemon id must not be blank\n\tat a.b.c(SourceFile:1)\n\tat a.d.e(SourceFile:1)",
         )
 
-        assertTrue(result, result.contains("com.vintagegarage.listing.ListingRepository.load(ListingRepository.java:58)"))
-        assertTrue(result, result.contains("com.vintagegarage.listing.ListingViewModel.refresh(ListingViewModel.java:31)"))
+        assertTrue(result, result.contains("com.example.pokedex.data.PokemonRepository.load(PokemonRepository.java:58)"))
+        assertTrue(result, result.contains("com.example.pokedex.ui.PokemonViewModel.refresh(PokemonViewModel.java:31)"))
         Files.delete(file)
     }
 

@@ -13,7 +13,7 @@ class ChunkMergeTest {
         append("{\"items\":[")
         repeat(times = 120) { index ->
             if (index > 0) append(',')
-            append("{\"id\":$index,\"title\":\"1991 Mercedes-Benz 300 CE C124\",\"url\":\"https://assets.example.com/uploads/$index.jpg\"}")
+            append("{\"id\":$index,\"name\":\"pokemon-$index\",\"url\":\"https://pokeapi.co/api/v2/pokemon/$index/\"}")
         }
         append("]}")
     }

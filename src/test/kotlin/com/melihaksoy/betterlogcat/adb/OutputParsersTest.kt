@@ -30,14 +30,14 @@ class OutputParsersTest {
               PID USER         NAME
                 1 root         init
               449 system       android.hardware.gatekeeper-service.nonsecure
-            14302 u0_a215      com.vintagegarage.app
-            14388 u0_a215      com.vintagegarage.app:sync
+            14302 u0_a215      com.example.pokedex
+            14388 u0_a215      com.example.pokedex:sync
         """.trimIndent()
 
         val processes = ProcessListParser.parse(output = output)
 
-        assertEquals("com.vintagegarage.app", processes[14302]?.name)
-        assertEquals("com.vintagegarage.app:sync", processes[14388]?.name)
+        assertEquals("com.example.pokedex", processes[14302]?.name)
+        assertEquals("com.example.pokedex:sync", processes[14388]?.name)
         assertEquals(true, processes[14302]?.isApp)
         assertEquals(false, processes[449]?.isApp)
         assertEquals(false, processes[1]?.isApp)
@@ -48,12 +48,12 @@ class OutputParsersTest {
         val output = """
             USER     PID   PPID  VSIZE  RSS     WCHAN    PC         NAME
             root      1     0     8904   784   ffffffff 00000000 S /init
-            u0_a52    1830  176   901232 41284 ffffffff 00000000 S com.vintagegarage.app
+            u0_a52    1830  176   901232 41284 ffffffff 00000000 S com.example.pokedex
         """.trimIndent()
 
         val names = ProcessListParser.parse(output = output)
 
-        assertEquals("com.vintagegarage.app", names[1830]?.name)
+        assertEquals("com.example.pokedex", names[1830]?.name)
         assertEquals(true, names[1830]?.isApp)
     }
 }

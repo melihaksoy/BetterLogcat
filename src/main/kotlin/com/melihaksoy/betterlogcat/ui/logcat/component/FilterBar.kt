@@ -377,9 +377,9 @@ private fun levelName(level: LogLevel): String = when (level) {
 // region Previews
 
 private val PREVIEW_SUGGESTIONS = SuggestionContext(
-    packages = listOf("com.vintagegarage.app"),
+    packages = listOf("com.example.pokedex"),
     tags = listOf("OkHttp", "ActivityThread"),
-    processNames = listOf("com.vintagegarage.app"),
+    processNames = listOf("com.example.pokedex"),
 )
 
 @Preview

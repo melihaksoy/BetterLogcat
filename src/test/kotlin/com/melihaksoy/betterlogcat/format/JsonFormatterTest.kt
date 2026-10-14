@@ -11,7 +11,7 @@ class JsonFormatterTest {
     @Test
     fun `pretty prints nested json`() {
         val pretty = JsonFormatter.format(
-            json = """{"id":1,"tags":["a","b"],"price":{"amount":98500,"currency":"GBP"},"sold":false,"note":null}""",
+            json = """{"id":1,"tags":["a","b"],"stats":{"hp":45,"speed":45},"legendary":false,"note":null}""",
             pretty = true,
         )
 
@@ -22,11 +22,11 @@ class JsonFormatterTest {
                 "a",
                 "b"
               ],
-              "price": {
-                "amount": 98500,
-                "currency": "GBP"
+              "stats": {
+                "hp": 45,
+                "speed": 45
               },
-              "sold": false,
+              "legendary": false,
               "note": null
             }
         """.trimIndent()
@@ -62,12 +62,12 @@ class JsonFormatterTest {
 
     @Test
     fun `detects json after a prefix`() {
-        val content = JsonFormatter.detect(message = """<-- 200 https://api.example.com/v2/cars {"id":7,"make":"Jaguar"}""")
+        val content = JsonFormatter.detect(message = """<-- 200 https://pokeapi.co/api/v2/pokemon/7 {"id":7,"name":"squirtle"}""")
 
         assertTrue(content is JsonContent.Found)
         content as JsonContent.Found
-        assertEquals("<-- 200 https://api.example.com/v2/cars ", content.prefix)
-        assertEquals("""{"id":7,"make":"Jaguar"}""", content.minified)
+        assertEquals("<-- 200 https://pokeapi.co/api/v2/pokemon/7 ", content.prefix)
+        assertEquals("""{"id":7,"name":"squirtle"}""", content.minified)
     }
 
     @Test
@@ -80,13 +80,13 @@ class JsonFormatterTest {
 
     @Test
     fun `does not treat android bundles as json`() {
-        assertEquals(JsonContent.None, JsonFormatter.detect(message = "Bundle[{id=7, make=Jaguar}]"))
+        assertEquals(JsonContent.None, JsonFormatter.detect(message = "Bundle[{id=7, name=squirtle}]"))
         assertEquals(JsonContent.None, JsonFormatter.detect(message = "Loaded {} items"))
     }
 
     @Test
     fun `highlighter marks keys and values`() {
-        val tokens = JsonHighlighter.tokens(json = """{"id": 7, "ok": true, "name": "E-Type"}""")
+        val tokens = JsonHighlighter.tokens(json = """{"id": 7, "ok": true, "name": "squirtle"}""")
 
         assertEquals(
             listOf(

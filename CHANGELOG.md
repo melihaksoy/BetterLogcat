@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+- Fixed: the Network panel showed the method and address in the editor's text color, which could be dark
+  on a dark panel.
+
 ## 0.12.3
 - Fixed: typing in the device and package pickers' search field did nothing; the popup now gets the focus.
 - Network panel: right-click a call to copy its path, URL or cURL. The detail pane has copy and open

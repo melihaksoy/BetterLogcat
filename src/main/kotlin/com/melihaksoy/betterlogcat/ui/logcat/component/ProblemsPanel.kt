@@ -629,7 +629,7 @@ private fun previewProblem(
     level = LogLevel.ERROR,
     pid = 14_302,
     tid = 14_330,
-    processName = "com.vintagegarage.app",
+    processName = "com.example.pokedex",
     sample = "$title: $detail",
 )
 
@@ -639,8 +639,8 @@ private val previewProblems = ProblemsUiModel(
         title = "Google Pixel 9",
         startedEpochMillis = 1_791_540_000_000L,
         problems = listOf(
-            previewProblem(kind = ProblemKind.CRASH, title = "IllegalStateException", detail = "Listing id must not be blank", tag = "AndroidRuntime", count = 1),
-            previewProblem(kind = ProblemKind.ANR, title = "ANR in com.vintagegarage.app", detail = "Input dispatching timed out", tag = "ActivityManager", count = 1),
+            previewProblem(kind = ProblemKind.CRASH, title = "IllegalStateException", detail = "Pokemon id must not be blank", tag = "AndroidRuntime", count = 1),
+            previewProblem(kind = ProblemKind.ANR, title = "ANR in com.example.pokedex", detail = "Input dispatching timed out", tag = "ActivityManager", count = 1),
             previewProblem(kind = ProblemKind.EXCEPTION, title = "UnknownHostException", detail = "Unable to resolve host", tag = "OkHttp", count = 4),
             previewProblem(kind = ProblemKind.STRICT_MODE, title = "DiskReadViolation", detail = "~duration=48 ms", tag = "StrictMode", count = 2),
             previewProblem(kind = ProblemKind.WARNING, title = "Skipped 42 frames!", detail = "", tag = "Choreographer", count = 12),
@@ -649,7 +649,7 @@ private val previewProblems = ProblemsUiModel(
     history = listOf(
         ProblemSession(
             id = "old",
-            title = "com.vintagegarage.app launched · Google Pixel 9",
+            title = "com.example.pokedex launched · Google Pixel 9",
             startedEpochMillis = 1_791_450_000_000L,
             problems = listOf(previewProblem(kind = ProblemKind.EXCEPTION, title = "IOException", detail = "closed", tag = "Loader", count = 3)),
         ),

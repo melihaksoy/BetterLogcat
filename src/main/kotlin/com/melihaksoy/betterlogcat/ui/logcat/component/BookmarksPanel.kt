@@ -285,7 +285,7 @@ private fun previewBookmark(
     ),
     level = level,
     message = message,
-    processName = "com.vintagegarage.app",
+    processName = "com.example.pokedex",
     deviceName = "Google Pixel 9",
 )
 
@@ -301,7 +301,7 @@ private fun PreviewBookmarksPanel() {
                         seconds = 0,
                         level = LogLevel.ERROR,
                         tag = "AndroidRuntime",
-                        message = "FATAL EXCEPTION: main\nProcess: com.vintagegarage.app, PID: 14302",
+                        message = "FATAL EXCEPTION: main\nProcess: com.example.pokedex, PID: 14302",
                     ),
                 ),
                 BookmarkUiModel(
@@ -309,7 +309,7 @@ private fun PreviewBookmarksPanel() {
                         seconds = 42,
                         level = LogLevel.INFO,
                         tag = "Ktor Client",
-                        message = "RESPONSE: 200 OK\nFROM: https://api.vintagegarage.app/v1/listings/88213",
+                        message = "RESPONSE: 200 OK\nFROM: https://pokeapi.co/api/v2/pokemon/25",
                     ),
                     liveId = 7,
                 ),

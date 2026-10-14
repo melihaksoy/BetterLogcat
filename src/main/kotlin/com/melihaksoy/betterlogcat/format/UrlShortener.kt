@@ -9,8 +9,8 @@ data class LinkedText(
 )
 
 /**
- * Hides the user's base URLs in log text: `https://staging.example.com/app-api/v1/items` shows as
- * `/app-api/v1/items`. The link keeps the full address. A base without a scheme matches any scheme.
+ * Hides the user's base URLs in log text: `https://staging.example.com/api/v1/items` shows as
+ * `/api/v1/items`. The link keeps the full address. A base without a scheme matches any scheme.
  * A data class on the bases, so rows only rebuild text when they change.
  */
 @Immutable

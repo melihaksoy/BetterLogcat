@@ -11,7 +11,7 @@ and the last filter comes back next time.
 | Form | Meaning |
 |---|---|
 | `key:value` | contains `value` (case does not matter) |
-| `key=:value` | equals `value`; takes a comma list: `tag=:OkHttp,GarageApp` |
+| `key=:value` | equals `value`; takes a comma list: `tag=:OkHttp,PokedexApp` |
 | `key~:regex` | matches the regular expression |
 | `-key:value` | excludes what the term matches (works with `=:` and `~:` too) |
 | `"two words"` | quote a value that has spaces: `tag:"Ktor Client"` |

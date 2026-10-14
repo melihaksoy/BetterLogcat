@@ -152,7 +152,7 @@ private fun PreviewMessageFooterJson() {
                 tid = 4_977,
                 level = LogLevel.INFO,
                 tag = "Ktor Client",
-                message = "RESPONSE: 200 {\"data\":[{\"id\":\"C1871320\",\"listing_type\":\"basic\"}]}",
+                message = "RESPONSE: 200 {\"results\":[{\"id\":25,\"name\":\"pikachu\"}]}",
             ),
             isExpanded = false,
             colors = rememberLogColors(),

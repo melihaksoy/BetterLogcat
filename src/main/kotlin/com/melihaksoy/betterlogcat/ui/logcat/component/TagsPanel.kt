@@ -951,7 +951,7 @@ private fun PreviewTagsPanel() {
     BetterLogcatPreviewTheme {
         TagsPanel(
             tagCounts = LogcatPreviewData.tagCounts,
-            appTags = setOf("OkHttp", "GarageApp", "AndroidRuntime"),
+            appTags = setOf("OkHttp", "PokedexApp", "AndroidRuntime"),
             filter = LogFilter(query = "package:mine -tag=:art,adbd "),
             colors = rememberLogColors(),
             tagGroups = listOf(

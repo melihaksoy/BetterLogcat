@@ -9,12 +9,12 @@ class UrlShortenerTest {
 
     @Test
     fun `base is hidden and the link keeps the full address`() {
-        val shown = shortener.shorten(text = "REQUEST: https://staging.example.com/app-api/v1/push-tokens")
+        val shown = shortener.shorten(text = "REQUEST: https://staging.example.com/api/v1/push-tokens")
 
-        assertEquals("REQUEST: /app-api/v1/push-tokens", shown.text)
+        assertEquals("REQUEST: /api/v1/push-tokens", shown.text)
         val link = shown.links.single()
-        assertEquals("https://staging.example.com/app-api/v1/push-tokens", link.url)
-        assertEquals("/app-api/v1/push-tokens", shown.text.substring(link.start, link.end))
+        assertEquals("https://staging.example.com/api/v1/push-tokens", link.url)
+        assertEquals("/api/v1/push-tokens", shown.text.substring(link.start, link.end))
     }
 
     @Test
@@ -40,18 +40,18 @@ class UrlShortenerTest {
 
     @Test
     fun `the longest base wins`() {
-        val shown = UrlShortener(bases = listOf("https://staging.example.com", "https://staging.example.com/app-api"))
-            .shorten(text = "https://staging.example.com/app-api/v1/user")
+        val shown = UrlShortener(bases = listOf("https://staging.example.com", "https://staging.example.com/api"))
+            .shorten(text = "https://staging.example.com/api/v1/user")
 
         assertEquals("/v1/user", shown.text)
     }
 
     @Test
     fun `json escaped slashes are hidden too`() {
-        val shown = shortener.shorten(text = """{"url":"https:\/\/staging.example.com\/app-api\/v1"}""")
+        val shown = shortener.shorten(text = """{"url":"https:\/\/staging.example.com\/api\/v1"}""")
 
-        assertEquals("""{"url":"\/app-api\/v1"}""", shown.text)
-        assertEquals("https://staging.example.com/app-api/v1", shown.links.single().url)
+        assertEquals("""{"url":"\/api\/v1"}""", shown.text)
+        assertEquals("https://staging.example.com/api/v1", shown.links.single().url)
     }
 
     @Test

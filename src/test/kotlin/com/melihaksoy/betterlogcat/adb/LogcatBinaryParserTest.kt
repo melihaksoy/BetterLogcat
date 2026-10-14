@@ -58,7 +58,7 @@ class LogcatBinaryParserTest {
         ) + entry(
             priority = 3,
             tag = "OkHttp",
-            message = "--> GET /v2/listings",
+            message = "--> GET /api/v2/pokemon",
         )
 
         val first = parser.feed(chunk = bytes.copyOfRange(0, 7))

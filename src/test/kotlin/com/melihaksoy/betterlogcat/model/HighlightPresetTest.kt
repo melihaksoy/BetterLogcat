@@ -10,14 +10,14 @@ class HighlightPresetTest {
     private val response = """
         RESPONSE: 200
         METHOD: GET
-        FROM: https://staging.example.com/app-api/v1/search/listings?listing_type_ex=auction
+        FROM: https://pokeapi.co/api/v2/pokemon?limit=20&offset=40
         COMMON HEADERS
         -> cache-control: no-cache, private
         -> content-type: application/json
         -> x-frame-options: SAMEORIGIN
         BODY Content-Type: application/json
         BODY START
-        {"data":[{"id":"C1871320","status":"ok"}]}
+        {"data":[{"id":25,"status":"ok"}]}
         BODY END
     """.trimIndent()
 
@@ -78,7 +78,7 @@ class HighlightPresetTest {
         val plain = "Basket loaded, status 200, METHOD: GET inside a sentence"
         HighlightPreset.Ktor.rules.forEach { rule ->
             assertFalse(rule.pattern, Regex(pattern = rule.pattern).containsMatchIn(input = plain))
-            assertFalse(rule.pattern, Regex(pattern = rule.pattern).containsMatchIn(input = "{\"data\":[{\"id\":\"C1871320\",\"status\":\"ok\"}]}"))
+            assertFalse(rule.pattern, Regex(pattern = rule.pattern).containsMatchIn(input = "{\"data\":[{\"id\":25,\"status\":\"ok\"}]}"))
         }
     }
 
@@ -118,7 +118,7 @@ class HighlightPresetTest {
         val plain = "Basket loaded --> next step, 200 OK, POST done <-- back"
         HighlightPreset.OkHttp.rules.forEach { rule ->
             assertFalse(rule.pattern, Regex(pattern = rule.pattern).containsMatchIn(input = plain))
-            assertFalse(rule.pattern, Regex(pattern = rule.pattern).containsMatchIn(input = "{\"data\":[{\"id\":\"C1871320\",\"status\":\"ok\"}]}"))
+            assertFalse(rule.pattern, Regex(pattern = rule.pattern).containsMatchIn(input = "{\"data\":[{\"id\":25,\"status\":\"ok\"}]}"))
         }
     }
 

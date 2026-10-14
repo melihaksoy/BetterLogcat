@@ -35,7 +35,17 @@ Without `localPlatformPath`, Gradle downloads the Android Studio version named i
 RENDER_DIR=/some/dir ./gradlew test --tests '*RenderProbeTest*' -PlocalPlatformPath="<oldest>"
 ```
 
-The screenshots in `docs/images` come from it (`RENDER_DIR=$PWD/docs/images`).
+The screenshots in `docs/images` come from it, in the dark theme:
+
+```bash
+RENDER_DARK=1 RENDER_DIR=/some/dir ./gradlew test --tests '*RenderProbeTest*' --rerun -PlocalPlatformPath="<oldest>"
+```
+
+Then copy the files that `docs/images` already has, and any new screen, from `/some/dir`. The probe also
+writes dev-only renders (`before.png`, `narrow.png`, `no-wrap*.png`) that do not belong in the docs.
+
+- Add `--rerun`: Gradle does not count environment variables as inputs, so it skips an up-to-date test.
+- `RENDER_SIZE=2400x1520` renders every screen at one size, for a Marketplace screenshot set.
 
 ## Continuous integration
 

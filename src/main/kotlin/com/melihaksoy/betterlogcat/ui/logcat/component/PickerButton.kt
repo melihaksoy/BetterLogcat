@@ -130,7 +130,7 @@ private fun PreviewPickerButtonDevice() {
 private fun PreviewPickerButtonPackage() {
     BetterLogcatPreviewTheme {
         PickerButton(
-            label = "com.vintagegarage.app",
+            label = "com.example.pokedex",
             detail = "",
             statusColor = Color.Unspecified,
             onClick = {},

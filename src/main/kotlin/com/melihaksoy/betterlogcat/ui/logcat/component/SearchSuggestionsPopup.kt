@@ -213,7 +213,7 @@ private fun PreviewSuggestionsValues() {
                 tokenStart = 0,
                 tokenEnd = 8,
                 isTokenEmpty = false,
-                items = listOf("mine", "com.vintagegarage.app", "com.android.systemui").map {
+                items = listOf("mine", "com.example.pokedex", "com.android.systemui").map {
                     Suggestion(
                         label = it,
                         key = null,

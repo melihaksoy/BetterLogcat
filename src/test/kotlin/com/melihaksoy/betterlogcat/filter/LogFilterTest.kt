@@ -10,8 +10,8 @@ import org.junit.Test
 class LogFilterTest {
 
     private val names = mapOf(
-        10 to "com.vintagegarage.app",
-        11 to "com.vintagegarage.app:sync",
+        10 to "com.example.pokedex",
+        11 to "com.example.pokedex:sync",
         20 to "com.android.systemui",
     )
 
@@ -27,7 +27,7 @@ class LogFilterTest {
 
     @Test
     fun `package filter includes sub processes`() {
-        val matcher = matcher(filter = LogFilter().withPackageFilter(packageFilter = PackageFilter.Package(name = "com.vintagegarage.app")))
+        val matcher = matcher(filter = LogFilter().withPackageFilter(packageFilter = PackageFilter.Package(name = "com.example.pokedex")))
 
         assertTrue(matcher.matches(entry = entry(pid = 10)))
         assertTrue(matcher.matches(entry = entry(pid = 11)))
@@ -41,7 +41,7 @@ class LogFilterTest {
         val withIds = LogFilterMatcher(
             filter = filter,
             processNames = names,
-            projectAppIds = setOf("com.vintagegarage.app"),
+            projectAppIds = setOf("com.example.pokedex"),
         )
         val withoutIds = matcher(filter = filter)
 

@@ -16,16 +16,16 @@ import org.junit.Test
 
 class KtorJsonTest {
 
-    private val body = """{"data":[{"id":"C2050077","vehicle":{"make":{"name":"Volkswagen"}},"thumbnail":"https:\/\/assets.example.com\/uploads\/1.jpg"}]}"""
+    private val body = """{"results":[{"name":"bulbasaur","url":"https:\/\/pokeapi.co\/api\/v2\/pokemon\/1\/"}]}"""
 
     private val response = """
         RESPONSE: 200
         METHOD: GET
-        FROM: https://staging.example.com/app-api/v1/search/top-picks
+        FROM: https://pokeapi.co/api/v2/pokemon?limit=20
         COMMON HEADERS
-        -> cache-control: no-cache, private
-        -> nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
-        -> report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report"}]}
+        -> cache-control: public, max-age=86400
+        -> x-trace: {"span":"a1b2c3","sampled":true}
+        -> x-rate-limit: {"limit":100,"remaining":99,"reset":60}
         BODY Content-Type: application/json
         BODY START
         $body
@@ -44,11 +44,11 @@ class KtorJsonTest {
 
     @Test
     fun `a body cut off by the logger still counts as json`() {
-        val cut = response.substringBefore("\"thumbnail\"")
+        val cut = response.substringBefore("\"url\"")
         val json = JsonFormatter.detect(message = cut) as JsonContent.Found
 
         assertFalse(json.main.isComplete)
-        assertTrue(json.main.raw.startsWith("{\"data\""))
+        assertTrue(json.main.raw.startsWith("{\"results\""))
     }
 
     @Test
@@ -56,17 +56,17 @@ class KtorJsonTest {
         val text = render(isExpanded = false).text
 
         assertTrue(text, text.startsWith("RESPONSE: 200"))
-        assertTrue(text, text.contains("https://staging.example.com/app-api/v1/search/top-picks"))
-        assertTrue(text, text.contains("{\"data\""))
-        assertFalse(text, text.contains("report_to"))
+        assertTrue(text, text.contains("https://pokeapi.co/api/v2/pokemon?limit=20"))
+        assertTrue(text, text.contains("{\"results\""))
+        assertFalse(text, text.contains("sampled"))
     }
 
     @Test
     fun `expanded response pretty prints only the body`() {
         val text = render(isExpanded = true).text
 
-        assertTrue(text, text.contains("-> nel: {\"report_to\":\"cf-nel\""))
-        assertTrue(text, text.contains("BODY START\n{\n  \"data\": ["))
+        assertTrue(text, text.contains("-> x-trace: {\"span\":\"a1b2c3\""))
+        assertTrue(text, text.contains("BODY START\n{\n  \"results\": ["))
         assertTrue(text, text.contains("}\nBODY END"))
     }
 

@@ -15,6 +15,7 @@ import com.melihaksoy.betterlogcat.ui.logcat.model.SelectionUiModel
 internal object LogcatPreviewData {
 
     private const val APP_PID = 14_302
+    private const val ADBD_PID = 611
 
     val pixel = Device(
         serial = "38211FDJH00A4K",
@@ -37,13 +38,13 @@ internal object LogcatPreviewData {
             id = 1,
             level = LogLevel.DEBUG,
             tag = "ActivityThread",
-            message = "handleBindApplication: com.vintagegarage.app",
+            message = "handleBindApplication: com.example.pokedex",
             pid = APP_PID,
         ),
         entry(
             id = 2,
             level = LogLevel.INFO,
-            tag = "GarageApp",
+            tag = "PokedexApp",
             message = "Cold start finished in 412 ms",
             pid = APP_PID,
         ),
@@ -51,7 +52,7 @@ internal object LogcatPreviewData {
             id = 3,
             level = LogLevel.DEBUG,
             tag = "OkHttp",
-            message = """<-- 200 https://api.vintagegarage.app/v2/listings/88213 {"id":88213,"make":"Jaguar","model":"E-Type","year":1967,"sold":false}""",
+            message = """<-- 200 https://pokeapi.co/api/v2/pokemon/25 {"id":25,"name":"pikachu","height":4,"weight":60,"legendary":false}""",
             pid = APP_PID,
         ),
         entry(
@@ -67,10 +68,10 @@ internal object LogcatPreviewData {
             tag = "AndroidRuntime",
             message = """
                 FATAL EXCEPTION: main
-                Process: com.vintagegarage.app, PID: 14302
-                java.lang.IllegalStateException: Listing id must not be blank
-                	at com.vintagegarage.listing.ListingRepository.load(ListingRepository.kt:58)
-                	at com.vintagegarage.listing.ListingViewModel.refresh(ListingViewModel.kt:31)
+                Process: com.example.pokedex, PID: 14302
+                java.lang.IllegalStateException: Pokemon id must not be blank
+                	at com.example.pokedex.data.PokemonRepository.load(PokemonRepository.kt:58)
+                	at com.example.pokedex.ui.PokemonViewModel.refresh(PokemonViewModel.kt:31)
                 	at android.os.Handler.dispatchMessage(Handler.java:106)
             """.trimIndent(),
             pid = APP_PID,
@@ -86,7 +87,7 @@ internal object LogcatPreviewData {
 
     val tagCounts: Map<String, Int> = mapOf(
         "ActivityThread" to 41,
-        "GarageApp" to 18,
+        "PokedexApp" to 18,
         "OkHttp" to 233,
         "Choreographer" to 12,
         "AndroidRuntime" to 1,
@@ -102,12 +103,24 @@ internal object LogcatPreviewData {
         entries = entries,
         totalCount = 1_284,
         processNames = mapOf(
-            APP_PID to "com.vintagegarage.app",
+            APP_PID to "com.example.pokedex",
             1_822 to "com.android.systemui",
         ),
-        packages = listOf("com.android.systemui", "com.vintagegarage.app"),
-        projectAppIds = setOf("com.vintagegarage.app"),
+        packages = listOf("com.android.systemui", "com.example.pokedex"),
+        projectAppIds = setOf("com.example.pokedex"),
         tagCounts = tagCounts,
+        // Which processes logged each tag: the Tags panel splits app tags from the rest with it, and
+        // keeps only app tags under package:mine. ART logs inside every app; adbd is its own process.
+        tagPids = mapOf(
+            "ActivityThread" to setOf(APP_PID, 1_822),
+            "PokedexApp" to setOf(APP_PID),
+            "OkHttp" to setOf(APP_PID),
+            "Choreographer" to setOf(APP_PID),
+            "AndroidRuntime" to setOf(APP_PID),
+            "ViewRootImpl" to setOf(APP_PID, 1_822),
+            "art" to setOf(APP_PID, 1_822),
+            "adbd" to setOf(ADBD_PID),
+        ),
         selection = SelectionUiModel(
             anchorId = 4,
             leadId = 5,
@@ -118,11 +131,11 @@ internal object LogcatPreviewData {
     val filteredState = logsState.copy(
         filter = LogFilter(
             levels = setOf(LogLevel.WARN, LogLevel.ERROR, LogLevel.ASSERT),
-            query = "listing",
+            query = "pokemon",
             terms = listOf(
                 QueryTerm(
                     key = QueryKey.PACKAGE,
-                    value = "com.vintagegarage.app",
+                    value = "com.example.pokedex",
                 ),
                 QueryTerm(
                     key = QueryKey.TAG,

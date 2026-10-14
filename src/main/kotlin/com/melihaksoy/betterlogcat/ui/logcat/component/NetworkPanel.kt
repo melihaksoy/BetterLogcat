@@ -239,12 +239,14 @@ private fun CallRow(
         Text(
             text = call.method.ifEmpty { "?" },
             modifier = Modifier.width(48.dp),
+            color = JewelTheme.globalColors.text.normal,
             style = JewelTheme.editorTextStyle,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
             text = call.path,
             modifier = Modifier.weight(1f),
+            color = JewelTheme.globalColors.text.normal,
             style = JewelTheme.editorTextStyle,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -269,7 +271,7 @@ private fun PreviewNetworkPanel() {
             calls = listOf(
                 NetworkCall(
                     method = "GET",
-                    url = "https://api.vintagegarage.app/v1/search/top-picks",
+                    url = "https://pokeapi.co/api/v2/pokemon?limit=20",
                     requestEntryId = 1,
                     requestEpochMillis = 0,
                     responseEntryId = 2,
@@ -278,7 +280,7 @@ private fun PreviewNetworkPanel() {
                 ),
                 NetworkCall(
                     method = "POST",
-                    url = "https://api.vintagegarage.app/v1/login",
+                    url = "https://pokeapi.co/api/v2/berry/1",
                     requestEntryId = 3,
                     requestEpochMillis = 10,
                     responseEntryId = 4,
@@ -287,7 +289,7 @@ private fun PreviewNetworkPanel() {
                 ),
                 NetworkCall(
                     method = "GET",
-                    url = "https://api.vintagegarage.app/v1/listings/88213",
+                    url = "https://pokeapi.co/api/v2/pokemon/25",
                     requestEntryId = 5,
                     requestEpochMillis = 20,
                 ),

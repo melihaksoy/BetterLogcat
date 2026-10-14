@@ -14,7 +14,7 @@ class IssueAndBacktraceTest {
     fun `issue markdown has the crash, app version, device and trace`() {
         val crash = LogEntry(
             id = 1, epochSeconds = 1_791_540_000L, nanos = 0, pid = 1, tid = 1, level = LogLevel.ERROR, tag = "AndroidRuntime",
-            message = "FATAL EXCEPTION: main\njava.lang.IllegalStateException: Listing id must not be blank\n\tat a.B.c(B.kt:1)",
+            message = "FATAL EXCEPTION: main\njava.lang.IllegalStateException: Pokemon id must not be blank\n\tat a.B.c(B.kt:1)",
         )
 
         val markdown = IssueReport.markdown(
@@ -24,7 +24,7 @@ class IssueAndBacktraceTest {
             device = Device(serial = "x", state = DeviceState.ONLINE, name = "Pixel 9", androidVersion = "15", apiLevel = "35"),
         )
 
-        assertTrue(markdown.startsWith("### Crash: IllegalStateException\n\nListing id must not be blank\n"))
+        assertTrue(markdown.startsWith("### Crash: IllegalStateException\n\nPokemon id must not be blank\n"))
         assertTrue("- **App:** `com.app` 1.2.3 (45)" in markdown)
         assertTrue("- **Device:** Pixel 9, Android 15 (API 35)" in markdown)
         assertTrue("```\nFATAL EXCEPTION: main\n" in markdown)

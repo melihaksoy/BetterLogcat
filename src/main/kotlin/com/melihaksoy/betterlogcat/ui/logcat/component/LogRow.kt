@@ -591,7 +591,7 @@ private fun PreviewLogRow() {
                 message = "Basket loaded with 3 items, total EUR 42.90",
             ),
             previous = null,
-            processName = "com.vintagegarage.app",
+            processName = "com.example.pokedex",
             isSelected = false,
             isExpanded = false,
             viewOptions = previewOptions,
@@ -616,13 +616,13 @@ private fun PreviewLogRowStackTraceExpanded() {
                 tag = "AndroidRuntime",
                 message = """
                     FATAL EXCEPTION: main
-                    java.lang.IllegalStateException: Listing id must not be blank
-                    	at com.vintagegarage.listing.ListingRepository.load(ListingRepository.kt:58)
-                    	at com.vintagegarage.listing.ListingViewModel.refresh(ListingViewModel.kt:31)
+                    java.lang.IllegalStateException: Pokemon id must not be blank
+                    	at com.example.pokedex.data.PokemonRepository.load(PokemonRepository.kt:58)
+                    	at com.example.pokedex.ui.PokemonViewModel.refresh(PokemonViewModel.kt:31)
                 """.trimIndent(),
             ),
             previous = null,
-            processName = "com.vintagegarage.app",
+            processName = "com.example.pokedex",
             isSelected = true,
             isExpanded = true,
             viewOptions = previewOptions,
@@ -645,15 +645,15 @@ private fun PreviewLogRowJsonExpanded() {
                 id = 3,
                 level = LogLevel.DEBUG,
                 tag = "OkHttp",
-                message = """<-- 200 https://api.vintagegarage.com/v2/listings/88213 {"id":88213,"make":"Jaguar","model":"E-Type","year":1967,"price":{"amount":98500,"currency":"GBP"},"sold":false}""",
+                message = """<-- 200 https://pokeapi.co/api/v2/pokemon/25 {"id":25,"name":"pikachu","height":4,"weight":60,"stats":{"hp":35,"speed":90},"legendary":false}""",
             ),
             previous = null,
-            processName = "com.vintagegarage.app",
+            processName = "com.example.pokedex",
             isSelected = false,
             isExpanded = true,
             viewOptions = previewOptions,
             highlighter = SearchHighlighter(
-                query = "Jaguar",
+                query = "pikachu",
                 isRegex = false,
                 isMatchCase = false,
             ),

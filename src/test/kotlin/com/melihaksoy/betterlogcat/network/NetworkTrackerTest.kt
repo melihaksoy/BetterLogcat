@@ -14,8 +14,8 @@ class NetworkTrackerTest {
     @Test
     fun `ktor request and response pair up`() {
         val tracker = NetworkTracker()
-        tracker.onEntry(entry = entry(id = 1, millis = 0, message = "REQUEST: https://api.example.com/v1/search/top-picks\nMETHOD: GET\nCOMMON HEADERS"))
-        tracker.onEntry(entry = entry(id = 2, millis = 340, message = "RESPONSE: 200\nMETHOD: GET\nFROM: https://api.example.com/v1/search/top-picks\nBODY START\n{}\nBODY END"))
+        tracker.onEntry(entry = entry(id = 1, millis = 0, message = "REQUEST: https://pokeapi.co/api/v2/pokemon?limit=20\nMETHOD: GET\nCOMMON HEADERS"))
+        tracker.onEntry(entry = entry(id = 2, millis = 340, message = "RESPONSE: 200\nMETHOD: GET\nFROM: https://pokeapi.co/api/v2/pokemon?limit=20\nBODY START\n{}\nBODY END"))
 
         val call = tracker.snapshot().single()
         assertEquals("GET", call.method)

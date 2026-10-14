@@ -269,15 +269,19 @@ private fun AddressLine(
     address: AnnotatedString,
     colors: LogColors,
 ) {
+    // The editor text style carries the editor scheme's foreground, which can be dark on a dark panel.
+    val textColor = JewelTheme.globalColors.text.normal
     Row(horizontalArrangement = Arrangement.spacedBy(space = 8.dp)) {
         Text(
             text = call.method.ifEmpty { "?" },
+            color = textColor,
             style = JewelTheme.editorTextStyle,
             fontWeight = FontWeight.Bold,
         )
         SelectionContainer(modifier = Modifier.weight(1f)) {
             Text(
                 text = address,
+                color = textColor,
                 style = JewelTheme.editorTextStyle,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,

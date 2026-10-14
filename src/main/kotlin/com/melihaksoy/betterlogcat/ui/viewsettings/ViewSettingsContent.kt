@@ -570,7 +570,7 @@ private fun PreviewViewSettingsContent() {
         ViewSettingsContent(
             viewOptions = ViewOptionsUiModel(),
             mappingFileName = "mapping.txt",
-            packageAliases = mapOf("com.vintagegarage.app.debug" to "VG debug"),
+            packageAliases = mapOf("com.example.pokedex.debug" to "VG debug"),
             levelColors = emptyMap(),
             highlightRules = emptyList(),
             presetHighlights = PresetHighlights(),
