@@ -91,6 +91,11 @@ internal fun ProblemsPanel(
     }
     var collapsedKinds by remember { mutableStateOf(value = emptySet<ProblemKind>()) }
     var expandedSessions by remember { mutableStateOf(value = emptySet<String>()) }
+    // The live session and the history fold too. A search opens both, like the history sessions.
+    var isCurrentFolded by remember { mutableStateOf(value = false) }
+    var isHistoryFolded by remember { mutableStateOf(value = false) }
+    val isCurrentOpen = !isCurrentFolded || query.isNotEmpty()
+    val isHistoryOpen = !isHistoryFolded || query.isNotEmpty()
     // How many lines back each problem's next click goes: 0 is the newest line.
     var cursors by remember { mutableStateOf(value = emptyMap<String, Int>()) }
     val onProblemClick = { session: ProblemSession, problem: SavedProblem ->
@@ -158,7 +163,9 @@ internal fun ProblemsPanel(
                 modifier = Modifier.fillMaxSize(),
                 state = listState,
             ) {
-                if (problems.frameSkips.isNotEmpty() && query.isEmpty()) {
+                // Frame drops belong to the live session: under its header, and folded with it.
+                val hasFrameDrops = problems.frameSkips.isNotEmpty() && query.isEmpty()
+                if (hasFrameDrops && current == null) {
                     item(key = "frames") {
                         FrameDropsCard(
                             skips = problems.frameSkips,
@@ -171,12 +178,22 @@ internal fun ProblemsPanel(
                         SessionHeaderRow(
                             session = current,
                             label = BetterLogcatBundle.message("problems.session.current"),
-                            isExpanded = null,
+                            isExpanded = isCurrentOpen,
                             colors = colors,
-                            onClick = {},
+                            onClick = { isCurrentFolded = !isCurrentFolded },
                             onMenu = { point -> onSessionMenu(current, point) },
                             onDelete = null,
                         )
+                    }
+                }
+                if (current != null && isCurrentOpen) {
+                    if (hasFrameDrops) {
+                        item(key = "frames") {
+                            FrameDropsCard(
+                                skips = problems.frameSkips,
+                                colors = colors,
+                            )
+                        }
                     }
                     if (current.problems.isEmpty()) {
                         item(key = "current-empty") {
@@ -215,11 +232,13 @@ internal fun ProblemsPanel(
                     item(key = "history") {
                         KindHeaderRow(
                             title = BetterLogcatBundle.message("problems.history", history.size),
-                            isCollapsed = null,
+                            isCollapsed = !isHistoryOpen,
                             colors = colors,
-                            onToggle = {},
+                            onToggle = { isHistoryFolded = !isHistoryFolded },
                         )
                     }
+                }
+                if (history.isNotEmpty() && isHistoryOpen) {
                     history.forEach { session ->
                         val isExpanded = session.id in expandedSessions || query.isNotEmpty()
                         item(key = "session-" + session.id) {
@@ -328,6 +347,7 @@ private val DATE_TIME_FORMAT = DateTimeFormatter.ofPattern("d MMM HH:mm")
 private val SESSION_INDENT = 14.dp
 private const val FRAME_BUCKETS = 30
 private const val FRAME_BUCKET_MILLIS = 10_000L
+private const val FRAME_CHART_MIN_BARS = 3
 
 @Composable
 private fun KindHeaderRow(
@@ -530,7 +550,8 @@ private val CLOCK_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
 
 /**
  * Frame drops of the session: how often Choreographer skipped frames, how many, the worst one, and
- * bars of skipped frames per 10 seconds over the 5 minutes up to the newest drop.
+ * bars of skipped frames per 10 seconds over the 5 minutes up to the newest drop. The bars show only
+ * when drops fall in a few of those 10 seconds: one or two bars at the edge read as a stray block.
  */
 @Composable
 private fun FrameDropsCard(
@@ -565,21 +586,24 @@ private fun FrameDropsCard(
             ),
             color = colors.muted,
         )
+        if (buckets.count { it > 0 } < FRAME_CHART_MIN_BARS) return@Column
         val barColor = colors.level(level = LogLevel.WARN)
-        Canvas(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(28.dp),
-        ) {
-            val barWidth = size.width / FRAME_BUCKETS
-            buckets.forEachIndexed { index, frames ->
-                if (frames == 0) return@forEachIndexed
-                val barHeight = size.height * frames / peak
-                drawRect(
-                    color = barColor.copy(alpha = 0.75f),
-                    topLeft = Offset(x = index * barWidth, y = size.height - barHeight),
-                    size = Size(width = (barWidth - 2f).coerceAtLeast(minimumValue = 1f), height = barHeight),
-                )
+        Tooltip(tooltip = { Text(text = BetterLogcatBundle.message("problems.frames.chart")) }) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(28.dp),
+            ) {
+                val barWidth = size.width / FRAME_BUCKETS
+                buckets.forEachIndexed { index, frames ->
+                    if (frames == 0) return@forEachIndexed
+                    val barHeight = size.height * frames / peak
+                    drawRect(
+                        color = barColor.copy(alpha = 0.75f),
+                        topLeft = Offset(x = index * barWidth, y = size.height - barHeight),
+                        size = Size(width = (barWidth - 2f).coerceAtLeast(minimumValue = 1f), height = barHeight),
+                    )
+                }
             }
         }
     }

@@ -30,6 +30,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.WindowManager
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
 import com.melihaksoy.betterlogcat.model.DeviceState
+import com.melihaksoy.betterlogcat.filter.LogFilterMatcher
 import com.melihaksoy.betterlogcat.filter.PackageFilter
 import com.melihaksoy.betterlogcat.filter.SuggestionContext
 import com.melihaksoy.betterlogcat.ui.logcat.component.EmptyState
@@ -245,9 +246,12 @@ internal fun LogcatContent(
                         val appTags = remember(state.tagPids, state.processNames, state.projectAppIds) {
                             appTags(state = state)
                         }
+                        val tagCounts = remember(state.tagCounts, state.tagPids, state.processNames, state.projectAppIds, state.filter) {
+                            packageTagCounts(state = state)
+                        }
                         TagsPanel(
                             modifier = panelModifier,
-                            tagCounts = state.tagCounts,
+                            tagCounts = tagCounts,
                             tagRates = state.tagRates,
                             appTags = appTags,
                             filter = state.filter,
@@ -346,6 +350,25 @@ private fun MainArea(
                 },
             )
         }
+    }
+}
+
+/**
+ * Tag counts for the Tags panel. Under a `package:` filter (`package:mine` too), only tags that a shown
+ * package logged: a tag of another app never shows in the log, so its checkbox would do nothing.
+ */
+internal fun packageTagCounts(state: LogcatState): Map<String, Int> {
+    val matcher = LogFilterMatcher(
+        filter = state.filter,
+        processNames = state.processNames,
+        projectAppIds = state.projectAppIds,
+    )
+    if (!matcher.hasPackageTerms) return state.tagCounts
+    // Once per process, not once per tag and process: this runs on every log update.
+    val shownPids = state.processNames.filterValues { matcher.isProcessVisible(process = it) }.keys
+    val isUnknownShown = matcher.isProcessVisible(process = "")
+    return state.tagCounts.filterKeys { tag ->
+        state.tagPids[tag].orEmpty().any { pid -> if (pid in state.processNames) pid in shownPids else isUnknownShown }
     }
 }
 

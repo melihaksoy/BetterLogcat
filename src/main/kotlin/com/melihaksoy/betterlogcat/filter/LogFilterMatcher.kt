@@ -34,6 +34,11 @@ class LogFilterMatcher(
 
     private val positiveTagTerms = positiveByKey[QueryKey.TAG].orEmpty()
     private val negativeTagTerms = negatives.filter { it.term.key == QueryKey.TAG }
+    private val positivePackageTerms = positiveByKey[QueryKey.PACKAGE].orEmpty()
+    private val negativePackageTerms = negatives.filter { it.term.key == QueryKey.PACKAGE }
+
+    /** The filter has `package` terms, so lines of some processes never show. */
+    val hasPackageTerms: Boolean = positivePackageTerms.isNotEmpty() || negativePackageTerms.isNotEmpty()
 
     fun matches(entry: LogEntry): Boolean {
         if (entry.level !in running.levels) return false
@@ -48,6 +53,11 @@ class LogFilterMatcher(
     fun isTagVisible(tag: String): Boolean =
         (positiveTagTerms.isEmpty() || positiveTagTerms.any { it.matchesText(text = tag) }) &&
             negativeTagTerms.none { it.matchesText(text = tag) }
+
+    /** True when the `package` terms let lines of [process] through. Other terms do not count. For the Tags panel. */
+    fun isProcessVisible(process: String): Boolean =
+        (positivePackageTerms.isEmpty() || positivePackageTerms.any { it.matchesProcess(process = process) }) &&
+            negativePackageTerms.none { it.matchesProcess(process = process) }
 
     /** Character ranges in [text] that match the free-text query, for highlight. */
     fun highlights(text: String): List<IntRange> {
@@ -134,9 +144,12 @@ class LogFilterMatcher(
             }
         }
 
-        private fun matchesPackage(entry: LogEntry): Boolean {
-            // A start/death line belongs to the app it is about, not to system_server that logged it.
-            val process = entry.processEvent?.packageName ?: processNames[entry.pid].orEmpty()
+        // A start/death line belongs to the app it is about, not to system_server that logged it.
+        private fun matchesPackage(entry: LogEntry): Boolean = matchesProcess(process = entry.processEvent?.packageName ?: processNames[entry.pid].orEmpty())
+
+        /** Whether this `package` term matches [process], like [matches] does for a line of it. */
+        fun matchesProcess(process: String): Boolean {
+            if (!isValid) return !term.isNegated
             if (term.value == QueryTerm.MINE && term.mode == MatchMode.CONTAINS) {
                 return projectAppIds.isEmpty() || process.substringBefore(':') in projectAppIds
             }

@@ -10,6 +10,14 @@
   shows whole and scrolls sideways.
 - Tags panel: a click on "Your app" or "Other" folds the section. New app tags and busier tags now show
   at once, without closing and opening the panel.
+- Fixed: a click inside a long expanded message no longer scrolls back to its first line.
+- Long expanded messages no longer repeat a collapse button in the gutter every 20 lines; the sticky
+  header has Collapse.
+- Problems panel: "Now" and "Earlier sessions" fold. Frame drops sit under "Now"; their chart shows only
+  when drops spread over at least three 10-second spans, with a tooltip that says what the bars are.
+- Tags panel: under a `package:` filter (`package:mine` too), only tags those packages logged show.
+- The plugin is now for Android Studio only (`com.intellij.modules.androidstudio`) and no longer declares
+  `com.intellij.modules.compose`, so the Marketplace lists it for Android Studio.
 
 ## 0.12.2
 - Signed release of 0.12.1 (0.12.1 went to the Marketplace unsigned).

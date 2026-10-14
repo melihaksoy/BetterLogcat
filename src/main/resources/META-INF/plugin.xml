@@ -37,7 +37,9 @@
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
-    <depends>com.intellij.modules.compose</depends>
+    <!-- Android Studio only. Compose and Jewel come from Studio's core plugin; no com.intellij.modules.compose:
+         the Marketplace does not know that module in Android Studio and listed the plugin for IntelliJ IDEA only. -->
+    <depends>com.intellij.modules.androidstudio</depends>
     <depends>org.jetbrains.android</depends>
 
     <extensions defaultExtensionNs="com.intellij">

@@ -306,10 +306,12 @@ internal fun LogList(
             coroutineScope.launch { listState.scrollToItem(index = headerItem) }
         }
     }
+    val pointerLead = remember { PointerLead() }
     ScrollToLead(
         listState = listState,
         state = state,
         layout = layout,
+        pointerLead = pointerLead,
     )
     val itemHeights = rememberItemHeights(listState = listState)
     // Where a split message goes once text selection mode shows it as one item. Applied after the
@@ -470,6 +472,7 @@ internal fun LogList(
                                     (SystemInfo.isMac && event.keyboardModifiers.isPointerCtrlPressed)
                                 if (isContextClick) {
                                     if (entry.id !in currentState.selection.selectedIds) {
+                                        pointerLead.id = entry.id
                                         currentOnIntent(
                                             LogcatIntent.PressRow(
                                                 id = entry.id,
@@ -500,6 +503,7 @@ internal fun LogList(
                                 val isExtend = modifiers.isPointerShiftPressed
                                 // A plain click on the only selected row deselects it, on release, so drags still work.
                                 val wasOnlySelected = currentState.selection.selectedIds.singleOrNull() == entry.id
+                                pointerLead.id = entry.id
                                 currentOnIntent(
                                     LogcatIntent.PressRow(
                                         id = entry.id,
@@ -550,6 +554,7 @@ internal fun LogList(
                                     if (currentIndex != lastIndex) {
                                         lastIndex = currentIndex
                                         hasMovedOff = true
+                                        pointerLead.id = current.id
                                         currentOnIntent(
                                             LogcatIntent.DragSelect(
                                                 anchorId = entry.id,
@@ -648,7 +653,6 @@ internal fun LogList(
                                 isSingleLine = !viewOptions.softWrap,
                                 colors = colors,
                                 textStyle = textStyle,
-                                onCollapse = { collapseEntry(index) },
                             )
                         }
                     }
@@ -806,6 +810,11 @@ private class PendingJoin {
     var position: JoinPosition? = null
 }
 
+/** The row a mouse press made the lead. That row is on screen, so it needs no scroll. Plain, not state. */
+private class PointerLead {
+    var id: Long? = null
+}
+
 private data class JoinPosition(
     val entryIndex: Int,
     val item: Int,
@@ -846,15 +855,22 @@ private fun joinedEntryPosition(
     )
 }
 
-/** Keeps the keyboard lead row on screen. */
+/**
+ * Keeps the keyboard lead row on screen. A lead from a mouse press is skipped: a click inside a tall
+ * expanded message would scroll back to its first row.
+ */
 @Composable
 private fun ScrollToLead(
     listState: LazyListState,
     state: LogcatState,
     layout: LogListLayout,
+    pointerLead: PointerLead,
 ) {
     val leadId = state.selection.leadId
     LaunchedEffect(leadId) {
+        val isFromPointer = leadId == pointerLead.id
+        pointerLead.id = null
+        if (isFromPointer) return@LaunchedEffect
         val entryIndex = state.entries.binarySearch { it.id.compareTo(other = leadId) }
         if (entryIndex < 0) return@LaunchedEffect
         val index = layout.firstItemOf(entryIndex = entryIndex)

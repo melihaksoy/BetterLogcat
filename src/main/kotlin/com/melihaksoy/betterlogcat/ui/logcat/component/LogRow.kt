@@ -515,7 +515,8 @@ internal fun messageLabels(): MessageLabels = MessageLabels(
 
 /**
  * One more piece of a split big message, under its entry's row and lined up with the message column.
- * Keeps the row's selection tint and outline; the bottom edge only on the last piece.
+ * Keeps the row's selection tint and outline; the bottom edge only on the last piece. No collapse
+ * button: the sticky header over a scrolled message has Collapse.
  */
 @Composable
 internal fun LogContinuationRow(
@@ -527,7 +528,6 @@ internal fun LogContinuationRow(
     isSingleLine: Boolean,
     colors: LogColors,
     textStyle: TextStyle,
-    onCollapse: () -> Unit,
 ) {
     Row(
         modifier = modifier
@@ -546,27 +546,10 @@ internal fun LogContinuationRow(
             )
             .padding(start = ROW_HORIZONTAL_PADDING),
     ) {
-        // The gutter keeps a collapse button on every piece, so a huge message folds from anywhere.
-        Box(
-            modifier = Modifier.width(LEADING_SLOT),
-            contentAlignment = Alignment.TopCenter,
-        ) {
-            Icon(
-                key = AllIconsKeys.General.ChevronUp,
-                contentDescription = BetterLogcatBundle.message("row.collapse"),
-                modifier = Modifier
-                    .size(14.dp)
-                    .clickable(
-                        interactionSource = null,
-                        indication = null,
-                        onClick = onCollapse,
-                    ),
-            )
-        }
         Text(
             text = text,
             modifier = Modifier.padding(
-                start = (indent - ROW_HORIZONTAL_PADDING - LEADING_SLOT).coerceAtLeast(minimumValue = 0.dp),
+                start = (indent - ROW_HORIZONTAL_PADDING).coerceAtLeast(minimumValue = 0.dp),
                 end = ROW_HORIZONTAL_PADDING,
             ),
             style = textStyle,

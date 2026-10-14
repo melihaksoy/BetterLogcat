@@ -25,6 +25,10 @@ class LogBuffer(capacity: Int) {
     private val tagCounts = HashMap<String, Int>()
     private val tagPids = HashMap<String, MutableSet<Int>>()
 
+    // New (tag, pid) pairs are rare after the first seconds, so the snapshot is built again only then.
+    private var tagPidsCopy: Map<String, Set<Int>> = emptyMap()
+    private var isTagPidsChanged = false
+
     // Entries per tag per second over the last RATE_SECONDS seconds of device time, in ring buffers.
     private val rateStamps = HashMap<String, LongArray>()
     private val rateCounts = HashMap<String, IntArray>()
@@ -63,8 +67,17 @@ class LogBuffer(capacity: Int) {
         counts[slot]++
     }
 
-    /** Process ids seen per tag, for telling app tags from system tags. A few pids per tag at most. */
-    fun tagPidsSnapshot(): Map<String, Set<Int>> = tagPids.mapValues { it.value.toSet() }
+    /**
+     * Process ids seen per tag, for telling app tags from system tags and for the Tags panel under a
+     * `package:` filter. Every pid counts: a shared tag like HWUI must still find the app's pid.
+     */
+    fun tagPidsSnapshot(): Map<String, Set<Int>> {
+        if (isTagPidsChanged) {
+            tagPidsCopy = tagPids.mapValues { it.value.toSet() }
+            isTagPidsChanged = false
+        }
+        return tagPidsCopy
+    }
 
     fun append(entries: List<LogEntry>) {
         if (entries.isEmpty()) return
@@ -72,8 +85,7 @@ class LogBuffer(capacity: Int) {
             if (mergeIntoPrevious(entry = entry)) continue
             all.add(entry)
             tagCounts.merge(entry.tag, 1, Int::plus)
-            val pids = tagPids.getOrPut(entry.tag) { HashSet() }
-            if (pids.size < MAX_PIDS_PER_TAG) pids.add(entry.pid)
+            if (tagPids.getOrPut(entry.tag) { HashSet() }.add(entry.pid)) isTagPidsChanged = true
             countRate(entry = entry)
             admit(index = all.lastIndex)
         }
@@ -201,6 +213,7 @@ class LogBuffer(capacity: Int) {
         afterLeft = 0
         tagCounts.clear()
         tagPids.clear()
+        isTagPidsChanged = true
         rateStamps.clear()
         rateCounts.clear()
         latestSecond = 0L
@@ -240,7 +253,6 @@ class LogBuffer(capacity: Int) {
 
     private companion object {
         const val MIN_CAPACITY = 1_000
-        const val MAX_PIDS_PER_TAG = 16
         const val RATE_SECONDS = 30
         const val MERGE_LOOK_BACK = 64
 
