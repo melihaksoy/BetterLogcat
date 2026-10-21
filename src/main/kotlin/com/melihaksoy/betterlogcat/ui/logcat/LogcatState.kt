@@ -11,6 +11,7 @@ import com.melihaksoy.betterlogcat.network.NetworkCall
 import com.melihaksoy.betterlogcat.ui.logcat.model.BookmarkUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.LogcatContentUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.NetworkDetailUiModel
+import com.melihaksoy.betterlogcat.ui.logcat.model.PreviousLogUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.ProblemsUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SavedFiltersUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SelectionUiModel
@@ -76,6 +77,8 @@ data class LogcatState(
     val contextIds: Set<Long> = emptySet(),
     /** A saved log file open in this pane instead of the device stream. Empty when live. */
     val openedFileName: String = "",
+    /** Lines loaded from the previous IDE session; null when the log has none. */
+    val previousLog: PreviousLogUiModel? = null,
 ) {
     val selectedDevice: Device?
         get() = devices.firstOrNull { it.serial == selectedSerial }

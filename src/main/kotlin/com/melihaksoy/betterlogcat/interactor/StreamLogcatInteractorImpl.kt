@@ -18,6 +18,7 @@ class StreamLogcatInteractorImpl(private val session: AdbSession) : StreamLogcat
 
     override fun invoke(request: LogcatRequest): EitherFlow<List<LogEntry>> = eitherFlow<List<LogEntry>> {
         val client = session.client()
+        ids.accumulateAndGet(request.afterId, ::maxOf)
         val parser = LogcatBinaryParser(nextId = { ids.incrementAndGet() })
         client.stream(args = arguments(request = request)).collect { chunk ->
             val entries = parser.feed(chunk = chunk)

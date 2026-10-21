@@ -192,13 +192,7 @@ private fun CallRow(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
-    val statusColor = when {
-        call.isPending -> colors.muted
-        call.statusCode in 200..299 -> colors.info
-        call.statusCode in 300..399 -> colors.link
-        call.statusCode in 400..499 -> colors.warn
-        else -> colors.error
-    }
+    val statusColor = if (call.isPending) colors.muted else colors.httpStatus(statusCode = call.statusCode)
     Row(
         modifier = Modifier
             .fillMaxWidth()

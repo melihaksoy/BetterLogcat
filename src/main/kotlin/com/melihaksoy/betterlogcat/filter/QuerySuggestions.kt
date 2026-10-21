@@ -41,8 +41,10 @@ object QuerySuggestions {
 
     private const val MAX_ITEMS = 12
     private val ageValues = listOf("30s", "1m", "5m", "15m", "1h", "1d")
-    private val isValues = listOf("crash", "anr", "exception", "strictmode", "problem", "stacktrace", "json")
+    private val isValues = listOf("crash", "anr", "exception", "strictmode", "problem", "stacktrace", "json", "http")
     private val contextValues = listOf("1", "3", "5", "10")
+    private val methodValues = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
+    private val statusValues = listOf("2xx", "3xx", "4xx", "5xx")
 
     fun suggest(
         text: String,
@@ -119,6 +121,8 @@ object QuerySuggestions {
             QueryKey.AGE -> ageValues
             QueryKey.CONTEXT -> contextValues
             QueryKey.PROCESS -> context.processNames
+            QueryKey.METHOD -> methodValues
+            QueryKey.STATUS -> statusValues
             QueryKey.MESSAGE, QueryKey.PID, QueryKey.LINE, QueryKey.NAME -> emptyList()
         }
         val starts = candidates.filter { it.startsWith(prefix, ignoreCase = true) }

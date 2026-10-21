@@ -8,11 +8,14 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import com.melihaksoy.betterlogcat.filter.LogFilter
 import com.melihaksoy.betterlogcat.filter.LogFilterMatcher
+import com.melihaksoy.betterlogcat.format.JsonFoldRegion
+import com.melihaksoy.betterlogcat.format.JsonFolding
 import com.melihaksoy.betterlogcat.format.JsonHighlighter
 import com.melihaksoy.betterlogcat.format.StackFrame
 import com.melihaksoy.betterlogcat.format.StackFrameParser
@@ -22,6 +25,9 @@ import com.melihaksoy.betterlogcat.format.UrlShortener
 import com.melihaksoy.betterlogcat.model.HighlightRule
 import com.melihaksoy.betterlogcat.model.JsonContent
 import com.melihaksoy.betterlogcat.model.LogEntry
+import com.melihaksoy.betterlogcat.network.HttpMessage
+import com.melihaksoy.betterlogcat.network.KtorLog
+import com.melihaksoy.betterlogcat.network.NetworkCall
 import com.melihaksoy.betterlogcat.ui.theme.LogColors
 import java.util.Locale
 import java.util.regex.PatternSyntaxException
@@ -109,6 +115,9 @@ data class KeywordHighlighter(val rules: List<HighlightRule>) {
 @Immutable
 data class MessageLabels(
     val showAll: (Int, String) -> String,
+    val duration: (Long) -> String,
+    /** A folded JSON block: its count of keys, or of items when the block is an array (the Boolean). */
+    val folded: (Int, Boolean) -> String,
 )
 
 private const val JSON_PREVIEW_CHARS = 110
@@ -126,11 +135,18 @@ internal fun buildMessageText(
     keywords: KeywordHighlighter,
     /** Base URLs to hide. The network pane passes none: it shows full addresses. */
     urls: UrlShortener = UrlShortener.None,
+    /** The HTTP call of this entry. A collapsed response shows how long the call took. */
+    call: NetworkCall? = null,
+    /** Folded JSON blocks, by their place among the blocks that can fold (see [JsonFolding]). */
+    jsonFolds: Set<Int> = emptySet(),
     labels: MessageLabels,
     onOpenFrame: (StackFrame) -> Unit,
     onOpenUrl: (String) -> Unit,
     onShowAll: () -> Unit,
+    onToggleJsonFold: (Int) -> Unit = {},
 ): AnnotatedString {
+    // Where pretty JSON parts landed in the text: only those can fold.
+    val prettyParts = ArrayList<IntRange>()
     val text = buildAnnotatedString {
         val append = { part: String ->
             appendMessage(
@@ -155,6 +171,12 @@ internal fun buildMessageText(
                 onOpenUrl = onOpenUrl,
             )
         }
+        val appendPrettyJsonPart = { json: String ->
+            val start = length
+            // A gutter, so even the outer block has room for its fold chevron.
+            appendJsonPart(json.lineSequence().joinToString(separator = "\n") { JSON_GUTTER + it })
+            prettyParts += start until length
+        }
         val json = entry.json
         when {
             isExpanded && json is JsonContent.Found -> appendExpandedJson(
@@ -163,10 +185,12 @@ internal fun buildMessageText(
                 prettyJson = prettyJson,
                 append = append,
                 appendJsonPart = appendJsonPart,
+                appendPrettyJsonPart = appendPrettyJsonPart,
             )
             isExpanded || !entry.isExpandable -> append(entry.message)
             else -> appendCollapsed(
                 entry = entry,
+                call = call,
                 colors = colors,
                 labels = labels,
                 append = append,
@@ -174,18 +198,164 @@ internal fun buildMessageText(
                 onOpenUrl = onOpenUrl,
             )
         }
+        colorHttpStatus(
+            entry = entry,
+            colors = colors,
+        )
+    }
+    val folded = if (prettyParts.isEmpty()) {
+        text
+    } else {
+        foldJson(
+            text = text,
+            parts = prettyParts,
+            folds = jsonFolds,
+            colors = colors,
+            labels = labels,
+            onToggle = onToggleJsonFold,
+        )
     }
     return if (isExpanded && !isFullyShown) {
         capped(
-            text = text,
+            text = folded,
             colors = colors,
             labels = labels,
             onShowAll = onShowAll,
         )
     } else {
-        text
+        folded
     }
 }
+
+/**
+ * Colors the status code of an HTTP response by its class, as in the network panel. Every form of the
+ * message starts with the same first line, so the code sits where it sits in the message.
+ */
+private fun AnnotatedString.Builder.colorHttpStatus(
+    entry: LogEntry,
+    colors: LogColors,
+) {
+    val http = HttpMessage.of(message = entry.message) ?: return
+    val code = http.statusCode ?: return
+    if (http.statusStart < 0 || http.statusStart + STATUS_CHARS > length) return
+    addStyle(
+        style = SpanStyle(
+            color = colors.httpStatus(statusCode = code),
+            fontWeight = FontWeight.SemiBold,
+        ),
+        start = http.statusStart,
+        end = http.statusStart + STATUS_CHARS,
+    )
+}
+
+private const val STATUS_CHARS = 3
+
+/**
+ * Shows each folded JSON block as `▸ { … 12 keys }`. The line that opens a block (`▾ "data": {`) folds and
+ * unfolds it on click; so does the folded text. A block inside a folded block keeps its own state.
+ * Each shown block carries a [JsonPath.TAG] annotation from its key to its closer, so a split piece
+ * still knows which blocks are around its lines.
+ */
+private fun foldJson(
+    text: AnnotatedString,
+    parts: List<IntRange>,
+    folds: Set<Int>,
+    colors: LogColors,
+    labels: MessageLabels,
+    onToggle: (Int) -> Unit,
+): AnnotatedString {
+    val regions = parts.flatMap { part ->
+        JsonFolding.regions(
+            text = text,
+            start = part.first,
+            end = part.last + 1,
+        )
+    }
+    if (regions.isEmpty()) return text
+    val toggleStyles = TextLinkStyles(hoveredStyle = SpanStyle(background = colors.link.copy(alpha = FOLD_HOVER_TINT)))
+    return buildAnnotatedString {
+        var cursor = 0
+        // Unfolded blocks around the cursor, inner last. Each one has its path annotation pushed.
+        val around = ArrayList<JsonFoldRegion>()
+        val closeBefore = { position: Int ->
+            while (around.isNotEmpty() && around.last().close < position) {
+                val block = around.removeAt(around.lastIndex)
+                append(text.subSequence(cursor, block.close + 1))
+                cursor = block.close + 1
+                pop()
+            }
+        }
+        regions.forEachIndexed { ordinal, region ->
+            if (region.open < cursor) return@forEachIndexed
+            closeBefore(region.open)
+            val lineStart = maxOf(text.lastIndexOf(char = '\n', startIndex = region.open) + 1, cursor)
+            val keyStart = (lineStart..region.open).first { !text[it].isWhitespace() }
+            val key = text.text.substring(keyStart, region.open).trim().removeSuffix(":").trim().removeSurrounding("\"")
+            val parent = around.lastOrNull()
+            val isFolded = ordinal in folds
+            // The chevron takes the two spaces before the key; the gutter makes sure they are there.
+            val markStart = if (keyStart - JSON_GUTTER.length >= lineStart) keyStart - JSON_GUTTER.length else keyStart
+            append(text.subSequence(cursor, markStart))
+            pushStringAnnotation(
+                tag = JsonPath.TAG,
+                annotation = JsonPath.encode(
+                    item = JsonPathItem(
+                        block = ordinal,
+                        label = when {
+                            key.isNotEmpty() -> key
+                            parent?.isArray == true -> "[${region.index}]"
+                            region.isArray -> "[ ]"
+                            else -> "{ }"
+                        },
+                    ),
+                ),
+            )
+            if (markStart < keyStart) {
+                withStyle(style = SpanStyle(color = colors.muted)) {
+                    append(if (isFolded) FOLDED_CHEVRON else UNFOLDED_CHEVRON)
+                }
+            }
+            append(text.subSequence(keyStart, region.open + 1))
+            val toggle = LinkAnnotation.Clickable(
+                tag = "fold",
+                styles = toggleStyles,
+                linkInteractionListener = { onToggle(ordinal) },
+            )
+            addLink(
+                clickable = toggle,
+                start = length - (region.open + 1 - markStart),
+                end = length,
+            )
+            if (isFolded) {
+                withLink(link = toggle) {
+                    withStyle(
+                        style = SpanStyle(
+                            color = colors.muted,
+                            fontStyle = FontStyle.Italic,
+                        ),
+                    ) {
+                        append(" … ${labels.folded(region.children, region.isArray)} ")
+                    }
+                }
+                append(text.subSequence(region.close, region.close + 1))
+                cursor = region.close + 1
+                pop()
+            } else {
+                around += region
+                cursor = region.open + 1
+            }
+        }
+        closeBefore(Int.MAX_VALUE)
+        append(text.subSequence(cursor, text.length))
+    }
+}
+
+private const val FOLD_HOVER_TINT = 0.16f
+
+/** Two characters, as wide as [JSON_GUTTER], so a chevron never moves the key. */
+private const val UNFOLDED_CHEVRON = "▾ "
+private const val FOLDED_CHEVRON = "▸ "
+private const val JSON_GUTTER = "  "
 
 /**
  * Every JSON part in place. The main part and parts that start a line are pretty printed on their
@@ -197,6 +367,7 @@ private fun AnnotatedString.Builder.appendExpandedJson(
     prettyJson: Boolean,
     append: (String) -> Unit,
     appendJsonPart: (String) -> Unit,
+    appendPrettyJsonPart: (String) -> Unit,
 ) {
     var cursor = 0
     var needsBreak = false
@@ -209,7 +380,7 @@ private fun AnnotatedString.Builder.appendExpandedJson(
             val trimmed = before.trimEnd(' ', '\t')
             append(trimmed)
             if (length > 0 && !(trimmed.isEmpty() && needsBreak) && !trimmed.endsWith('\n')) append("\n")
-            appendJsonPart(block.pretty)
+            appendPrettyJsonPart(block.pretty)
         } else {
             append(before)
             appendJsonPart(block.raw)
@@ -222,30 +393,40 @@ private fun AnnotatedString.Builder.appendExpandedJson(
     append(after)
 }
 
-/**
- * One compact line: the start of the first line, the first web address when the first line has none
- * (so a response shows which request it answers), a preview of the main JSON part, then what is hidden.
- */
+/** One compact line: [collapsedHead], a preview of the main JSON part, then what is hidden. */
 private fun AnnotatedString.Builder.appendCollapsed(
     entry: LogEntry,
+    call: NetworkCall?,
     colors: LogColors,
     labels: MessageLabels,
     append: (String) -> Unit,
     appendJsonPart: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
 ) {
-    val firstLine = entry.lines.first()
     val json = entry.json as? JsonContent.Found
-    val firstLineText = if (json != null && json.main.start < firstLine.length) firstLine.substring(0, json.main.start) else firstLine
-    append(if (firstLineText.length > TEXT_PREVIEW_CHARS) firstLineText.take(TEXT_PREVIEW_CHARS) + "…" else firstLineText.trimEnd())
-    if (!firstLine.contains("http")) {
-        UrlFinder.find(text = entry.message.take(URL_SEARCH_CHARS)).firstOrNull()?.let { match ->
-            appendMuted(
-                text = "  ·  ",
-                colors = colors,
-            )
-            append(entry.message.substring(match.start, match.end))
-        }
+    val head = collapsedHead(
+        entry = entry,
+        json = json,
+        call = call,
+        labels = labels,
+    )
+    append(head.firstLine)
+    head.duration?.let { duration ->
+        appendMuted(
+            text = "  ·  ",
+            colors = colors,
+        )
+        appendMuted(
+            text = duration,
+            colors = colors,
+        )
+    }
+    head.address?.let { address ->
+        appendMuted(
+            text = "  ·  ",
+            colors = colors,
+        )
+        append(address)
     }
     if (json != null) {
         append(" ")
@@ -255,16 +436,65 @@ private fun AnnotatedString.Builder.appendCollapsed(
 }
 
 /** Characters in the one-line view [appendCollapsed] builds for [entry], for the sideways scroll width. */
-internal fun collapsedLength(entry: LogEntry): Int {
-    val firstLine = entry.lines.first()
+internal fun collapsedLength(
+    entry: LogEntry,
+    call: NetworkCall?,
+    labels: MessageLabels,
+): Int {
     val json = entry.json as? JsonContent.Found
-    val firstLineText = if (json != null && json.main.start < firstLine.length) firstLine.substring(0, json.main.start) else firstLine
-    var length = if (firstLineText.length > TEXT_PREVIEW_CHARS) TEXT_PREVIEW_CHARS + 1 else firstLineText.trimEnd().length
-    if (!firstLine.contains("http")) {
-        UrlFinder.find(text = entry.message.take(URL_SEARCH_CHARS)).firstOrNull()?.let { match -> length += URL_SEPARATOR_CHARS + match.end - match.start }
-    }
+    val head = collapsedHead(
+        entry = entry,
+        json = json,
+        call = call,
+        labels = labels,
+    )
+    var length = head.firstLine.length
+    head.duration?.let { length += URL_SEPARATOR_CHARS + it.length }
+    head.address?.let { length += URL_SEPARATOR_CHARS + it.length }
     if (json != null) length += 1 + minOf(json.main.minified.length, JSON_PREVIEW_CHARS + 1)
     return length
+}
+
+/** The text of the one-line view before the JSON preview. [duration] and [address] each go after a separator. */
+private class CollapsedHead(
+    val firstLine: String,
+    val duration: String?,
+    val address: String?,
+)
+
+/**
+ * The start of the first line, then the first web address when the first line has none (so a response
+ * shows which request it answers). A Ktor request or response shows its method before the address, and
+ * a Ktor response how long the call took. OkHttp writes both in its first line already.
+ */
+private fun collapsedHead(
+    entry: LogEntry,
+    json: JsonContent.Found?,
+    call: NetworkCall?,
+    labels: MessageLabels,
+): CollapsedHead {
+    val firstLine = entry.lines.first()
+    val method = KtorLog.method(message = entry.message)
+    val isRequest = method != null && firstLine.startsWith(KtorLog.REQUEST)
+    var text = if (json != null && json.main.start < firstLine.length) firstLine.substring(0, json.main.start) else firstLine
+    if (isRequest) text = "${KtorLog.REQUEST} $method ${text.substringAfter(KtorLog.REQUEST).trimStart()}"
+    val url = if (firstLine.contains("http")) {
+        null
+    } else {
+        UrlFinder.find(text = entry.message.take(URL_SEARCH_CHARS)).firstOrNull()?.let { entry.message.substring(it.start, it.end) }
+    }
+    val isResponse = method != null && !isRequest
+    return CollapsedHead(
+        firstLine = if (text.length > TEXT_PREVIEW_CHARS) text.take(TEXT_PREVIEW_CHARS) + "…" else text.trimEnd(),
+        duration = call
+            ?.takeIf { isResponse && it.responseEntryId == entry.id && it.durationMillis >= 0 }
+            ?.let { labels.duration(it.durationMillis) },
+        address = when {
+            !isResponse -> url
+            url == null -> method
+            else -> "$method $url"
+        },
+    )
 }
 
 /**

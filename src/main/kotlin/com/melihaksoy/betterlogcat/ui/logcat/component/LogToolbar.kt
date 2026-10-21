@@ -115,6 +115,19 @@ internal fun LogToolbar(
                 )
             },
         )
+        ToolbarToggleButton(
+            iconKey = AllIconsKeys.Actions.RerunAutomatically,
+            tooltip = BetterLogcatBundle.message("toolbar.clearOnAppLaunch"),
+            isSelected = state.viewOptions.clearOnAppLaunch,
+            onToggle = { isOn ->
+                onIntent(
+                    LogcatIntent.SetViewToggle(
+                        toggle = ViewToggle.CLEAR_ON_APP_LAUNCH,
+                        isOn = isOn,
+                    ),
+                )
+            },
+        )
         ToolbarDivider()
         ToolbarToggleButton(
             iconKey = AllIconsKeys.General.Hashtag,

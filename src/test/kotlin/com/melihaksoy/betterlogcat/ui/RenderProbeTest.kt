@@ -8,17 +8,31 @@ import com.intellij.ide.ui.UITheme
 import com.intellij.ide.ui.laf.UIThemeLookAndFeelInfoImpl
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.ui.JBColor
+import androidx.compose.foundation.layout.Column
 import com.melihaksoy.betterlogcat.filter.LogFilter
 import com.melihaksoy.betterlogcat.filter.PackageFilter
+import com.melihaksoy.betterlogcat.filter.SuggestionContext
 import com.melihaksoy.betterlogcat.model.Bookmark
+import com.melihaksoy.betterlogcat.model.LogEntry
 import com.melihaksoy.betterlogcat.model.LogLevel
 import com.melihaksoy.betterlogcat.model.TimeFormat
+import com.melihaksoy.betterlogcat.network.NetworkCall
 import com.melihaksoy.betterlogcat.ui.logcat.LogcatContent
+import com.melihaksoy.betterlogcat.ui.logcat.component.FilterBar
+import com.melihaksoy.betterlogcat.ui.logcat.component.GutterUiModel
+import com.melihaksoy.betterlogcat.ui.logcat.component.JsonPathBar
+import com.melihaksoy.betterlogcat.ui.logcat.component.JsonPathItem
+import com.melihaksoy.betterlogcat.ui.logcat.component.LogRow
+import com.melihaksoy.betterlogcat.ui.logcat.component.SearchHighlighter
+import com.melihaksoy.betterlogcat.ui.logcat.component.StickyEntryBar
 import com.melihaksoy.betterlogcat.ui.logcat.model.BookmarkUiModel
+import com.melihaksoy.betterlogcat.ui.logcat.model.SavedFiltersUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SidePanel
 import com.melihaksoy.betterlogcat.ui.logcat.popup.LogcatPopups
 import com.melihaksoy.betterlogcat.ui.logcat.preview.LogcatPreviewData
 import com.melihaksoy.betterlogcat.ui.theme.BetterLogcatPreviewTheme
+import com.melihaksoy.betterlogcat.ui.theme.rememberLogColors
+import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.skia.EncodedImageFormat
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
@@ -555,6 +569,56 @@ class RenderProbeTest : BasePlatformTestCase() {
                 },
                 onIntent = {},
             )
+        }
+    }
+
+    fun testRenderHttpAndFolds() {
+        val dir = System.getenv("RENDER_DIR") ?: return
+        val tags = listOf("System.out", "OkHttp", "Choreographer", "ActivityThread", "ViewRootImpl", "InsetsController", "ImeTracker")
+        render(File(dir, "filter-folds.png"), width = 2400, height = 200) {
+            FilterBar(
+                filter = LogFilter().withQueryString(text = "package:mine level:I tag=:${tags.joinToString(separator = ",")} status:4xx pikachu"),
+                isQueryValid = true,
+                suggestionContext = SuggestionContext(
+                    packages = emptyList(),
+                    tags = emptyList(),
+                    processNames = emptyList(),
+                ),
+                savedFilters = SavedFiltersUiModel(),
+                colors = rememberLogColors(),
+                onIntent = {},
+            )
+        }
+        val body = "{\"count\":2,\"results\":[{\"name\":\"bulbasaur\",\"stats\":{\"hp\":45,\"speed\":45}},{\"name\":\"ivysaur\",\"stats\":{\"hp\":60,\"speed\":60}}]}"
+        val entry = LogEntry(
+            id = 8, epochSeconds = 1_791_540_000L, nanos = 0, pid = 3776, tid = 4977, level = LogLevel.INFO, tag = "Ktor Client",
+            message = listOf("RESPONSE: 404 Not Found", "METHOD: GET", "FROM: https://pokeapi.co/api/v2/pokemon?limit=2", "BODY START", body, "BODY END").joinToString("\n"),
+        )
+        val call = NetworkCall(
+            method = "GET", url = "https://pokeapi.co/api/v2/pokemon?limit=2",
+            requestEntryId = 7, requestEpochMillis = 0, responseEntryId = 8, statusCode = 404, durationMillis = 340,
+        )
+        render(File(dir, "json-folds.png"), width = 2400, height = 900) {
+            Column {
+                listOf(false, true).forEach { expanded ->
+                    LogRow(
+                        entry = entry, previous = null, processName = "com.example.app.debug", isSelected = false, isExpanded = expanded,
+                        viewOptions = LogcatPreviewData.logsState.viewOptions, highlighter = SearchHighlighter.None,
+                        colors = rememberLogColors(), textStyle = JewelTheme.editorTextStyle, isStacked = false,
+                        gutter = GutterUiModel(isBookmarked = false, problem = null, call = call),
+                        jsonFolds = setOf(2), onToggleExpanded = {}, onOpenFrame = {},
+                    )
+                }
+            }
+        }
+        render(File(dir, "json-path.png"), width = 1600, height = 160) {
+            Column {
+                StickyEntryBar(entry = entry, colors = rememberLogColors(), textStyle = JewelTheme.editorTextStyle, onCollapse = {}, onCopyJson = {}, onOpenInEditor = {})
+                JsonPathBar(
+                    path = listOf(JsonPathItem(block = 0, label = "{ }"), JsonPathItem(block = 1, label = "results"), JsonPathItem(block = 2, label = "[1]"), JsonPathItem(block = 3, label = "stats")),
+                    colors = rememberLogColors(), textStyle = JewelTheme.editorTextStyle, onFold = {},
+                )
+            }
         }
     }
 

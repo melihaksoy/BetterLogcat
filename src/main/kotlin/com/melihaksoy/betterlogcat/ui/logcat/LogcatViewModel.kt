@@ -11,6 +11,7 @@ import com.melihaksoy.betterlogcat.domain.usecase.ObserveProcessesInteractor
 import com.melihaksoy.betterlogcat.domain.usecase.ObserveProjectAppIdsInteractor
 import com.melihaksoy.betterlogcat.domain.usecase.ProcessSnapshot
 import com.melihaksoy.betterlogcat.domain.usecase.StreamLogcatInteractor
+import com.melihaksoy.betterlogcat.filter.LevelVisibility
 import com.melihaksoy.betterlogcat.filter.LogBuffer
 import com.melihaksoy.betterlogcat.filter.LogFilter
 import com.melihaksoy.betterlogcat.filter.LogFilterMatcher
@@ -26,6 +27,7 @@ import com.melihaksoy.betterlogcat.format.StackFrame
 import com.melihaksoy.betterlogcat.format.StackRetracer
 import com.melihaksoy.betterlogcat.ide.AppearanceStore
 import com.melihaksoy.betterlogcat.ide.BookmarkStore
+import com.melihaksoy.betterlogcat.ide.LastLogStore
 import com.melihaksoy.betterlogcat.ide.PackageAliasStore
 import com.melihaksoy.betterlogcat.ide.ProblemHistoryStore
 import com.melihaksoy.betterlogcat.ide.SourceNavigator
@@ -42,6 +44,7 @@ import com.melihaksoy.betterlogcat.model.ProblemKind
 import com.melihaksoy.betterlogcat.model.ProblemRecorder
 import com.melihaksoy.betterlogcat.model.ProblemSession
 import com.melihaksoy.betterlogcat.model.ProcessEvent
+import com.melihaksoy.betterlogcat.model.SavedLog
 import com.melihaksoy.betterlogcat.model.TimeFormat
 import com.melihaksoy.betterlogcat.network.NetworkCall
 import com.melihaksoy.betterlogcat.network.NetworkTracker
@@ -49,6 +52,7 @@ import com.melihaksoy.betterlogcat.settings.BetterLogcatSettings
 import com.melihaksoy.betterlogcat.ui.logcat.model.BookmarkUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.LogcatContentUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.NetworkDetailUiModel
+import com.melihaksoy.betterlogcat.ui.logcat.model.PreviousLogUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.ProblemsUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SavedFiltersUiModel
 import com.melihaksoy.betterlogcat.ui.logcat.model.SelectionUiModel
@@ -79,6 +83,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.awt.datatransfer.StringSelection
 import java.io.File
@@ -107,6 +112,7 @@ class LogcatViewModel(
     private val bookmarkStore: BookmarkStore,
     private val tagNotesStore: TagNotesStore,
     private val problemHistoryStore: ProblemHistoryStore,
+    private val lastLogStore: LastLogStore,
 ) {
     private val _state = MutableStateFlow(value = initialState())
     val state: StateFlow<LogcatState> = _state.asStateFlow()
@@ -165,14 +171,29 @@ class LogcatViewModel(
     private var bookmarkKeys: Set<BookmarkKey> = emptySet()
     private val liveBookmarkIds = HashMap<BookmarkKey, Long>()
 
+    /** Saved logs are written here one at a time, in order, so a Clear's delete never lands before an older save. */
+    private val saveDispatcher = Dispatchers.IO.limitedParallelism(parallelism = 1)
+    private var isLastLogDirty = false
+    private var lastLogSave = 0L
+
+    /** Process names of lines from the previous IDE session. The device no longer knows those processes. */
+    private var previousProcessNames: Map<Int, String> = emptyMap()
+
+    /** The device whose saved log was already looked for, so an emptied log does not load it again. */
+    private var restoreTriedFor = ""
+
     init {
         buffer.refilter(predicate = matcher::matches)
-        observeDevices()
-            .mapEither(
-                onLeft = ::onDevicesError,
-                onRight = ::onDevicesChanged,
-            )
-            .launchIn(scope = workScope)
+        workScope.launch {
+            // The saved log goes in first, so the live stream starts after its last line.
+            restoreLastLog(serial = initialSerial)
+            observeDevices()
+                .mapEither(
+                    onLeft = ::onDevicesError,
+                    onRight = ::onDevicesChanged,
+                )
+                .launchIn(scope = workScope)
+        }
         aliasStore.aliases
             .onEach { aliases -> _state.update { it.copy(packageAliases = aliases) } }
             .launchIn(scope = workScope)
@@ -444,6 +465,7 @@ class LogcatViewModel(
             stopStreaming()
         }
         _state.update { it.copy(devices = devices, selectedSerial = serial) }
+        restoreLastLog(serial = serial)
         val device = devices.firstOrNull { it.serial == serial }
         // A pane showing a log file does not stream until the user goes back to live.
         if (device?.state == DeviceState.ONLINE && streamJob?.isActive != true && _state.value.openedFileName.isEmpty()) {
@@ -455,9 +477,13 @@ class LogcatViewModel(
     private fun selectDevice(serial: String) {
         if (serial == _state.value.selectedSerial) return
         workScope.launch {
+            // The log of the device left behind is saved, so going back to it shows it again.
+            saveLastLog()
             stopStreaming()
             buffer.clear()
             requestedPids.clear()
+            previousProcessNames = emptyMap()
+            restoreTriedFor = ""
             _state.update {
                 it.copy(
                     openedFileName = "",
@@ -469,8 +495,10 @@ class LogcatViewModel(
                     selection = SelectionUiModel(),
                     toggledIds = emptySet(),
                     pausedNewCount = 0,
+                    previousLog = null,
                 )
             }
+            restoreLastLog(serial = serial)
             val device = _state.value.devices.firstOrNull { it.serial == serial }
             if (device?.state == DeviceState.ONLINE) startStreaming(serial = serial)
             refreshContent()
@@ -487,15 +515,19 @@ class LogcatViewModel(
             )
         }
         val generation = ++streamGeneration
-        val since = withContext(context = bufferDispatcher) {
-            val last = buffer.lastEntry
-            when {
-                last != null -> last.epochSeconds * NANOS_PER_SECOND + last.nanos + 1
-                settings.state.loadExistingBuffer -> 0L
-                else -> -1L
-            }
+        val last = withContext(context = bufferDispatcher) { buffer.lastEntry }
+        val since = when {
+            last != null -> last.epochSeconds * NANOS_PER_SECOND + last.nanos + 1
+            settings.state.loadExistingBuffer -> 0L
+            else -> -1L
         }
-        streamJob = streamLogcat(request = LogcatRequest(serial = serial, sinceEpochNanos = since))
+        streamJob = streamLogcat(
+            request = LogcatRequest(
+                serial = serial,
+                sinceEpochNanos = since,
+                afterId = last?.id ?: 0L,
+            ),
+        )
             .mapEither(
                 onLeft = { refreshContent() },
                 onRight = { batch -> withContext(context = bufferDispatcher) { onBatch(received = batch) } },
@@ -560,10 +592,15 @@ class LogcatViewModel(
         ingest(batch = batch.subList(launchIndex, batch.size))
     }
 
-    private fun ingest(batch: List<LogEntry>) {
+    /** [isRestored]: lines from the previous IDE session. Their problems are in the saved history already. */
+    private fun ingest(
+        batch: List<LogEntry>,
+        isRestored: Boolean = false,
+    ) {
         if (batch.isEmpty()) return
         buffer.append(entries = batch)
         isDirty = true
+        if (!isRestored && _state.value.openedFileName.isEmpty()) isLastLogDirty = true
         if (bookmarkKeys.isNotEmpty()) {
             var isFound = false
             for (entry in batch) {
@@ -579,7 +616,7 @@ class LogcatViewModel(
         for (entry in batch) {
             if (networkTracker.onEntry(entry = entry)) isNetworkDirty = true
             if (entry.isCrash) crashes++
-            recordProblem(entry = entry)
+            if (!isRestored) recordProblem(entry = entry)
         }
         if (crashes > 0) _state.update { it.copy(crashCount = it.crashCount + crashes) }
         val names = _state.value.processNames
@@ -597,10 +634,11 @@ class LogcatViewModel(
     private fun onProcesses(snapshot: ProcessSnapshot) {
         val current = _state.value
         val packages = snapshot.appPackages.toList()
-        if (snapshot.names == current.processNames && packages == current.packages) return
+        val names = if (previousProcessNames.isEmpty()) snapshot.names else previousProcessNames + snapshot.names
+        if (names == current.processNames && packages == current.packages) return
         _state.update {
             it.copy(
-                processNames = snapshot.names,
+                processNames = names,
                 packages = packages,
             )
         }
@@ -622,6 +660,7 @@ class LogcatViewModel(
             val now = System.currentTimeMillis()
             if (recorder.isDirty && now - lastProblemsPublish >= PROBLEMS_INTERVAL_MILLIS) publishProblems()
             if (isHistoryDirty && now - lastHistorySave >= HISTORY_SAVE_INTERVAL_MILLIS) saveSession()
+            if (isLastLogDirty && now - lastLogSave >= LAST_LOG_SAVE_INTERVAL_MILLIS) saveLastLog()
         }
     }
 
@@ -667,7 +706,7 @@ class LogcatViewModel(
 
     private fun onAppLaunch(entry: LogEntry) {
         if (_state.value.openedFileName.isNotEmpty()) return
-        if (settings.state.clearOnAppLaunch) clearLog()
+        if (_state.value.viewOptions.clearOnAppLaunch) clearLog()
         val app = (entry.processEvent as? ProcessEvent.Started)?.packageName.orEmpty()
         beginSession(
             title = BetterLogcatBundle.message("problems.session.launch", app, deviceName(serial = _state.value.selectedSerial)),
@@ -807,6 +846,79 @@ class LogcatViewModel(
 
     // endregion
 
+    // region Saved log
+
+    /** Saves now, for a pane that closes: the periodic save can be a few seconds behind. Blocks the caller briefly. */
+    fun saveLastLogNow() {
+        val log = runBlocking(context = bufferDispatcher) { lastLogSnapshot() } ?: return
+        // On the save thread, so an older periodic save still queued cannot overwrite this one.
+        runBlocking(context = saveDispatcher) { lastLogStore.save(log = log) }
+    }
+
+    private fun saveLastLog() {
+        val log = lastLogSnapshot() ?: return
+        workScope.launch(context = saveDispatcher) { lastLogStore.save(log = log) }
+    }
+
+    /** The end of the log to save, or null when nothing changed since the last save. Buffer thread only. */
+    private fun lastLogSnapshot(): SavedLog? {
+        if (!isLastLogDirty) return null
+        isLastLogDirty = false
+        lastLogSave = System.currentTimeMillis()
+        val current = _state.value
+        if (!settings.state.keepLastLog || current.selectedSerial.isEmpty() || current.openedFileName.isNotEmpty()) return null
+        val entries = buffer.lastEntries(count = LastLogStore.MAX_ENTRIES).map { entry ->
+            if (entry.message.length > BookmarkStore.MAX_SAVED_MESSAGE) entry.withMessage(message = entry.message.take(n = BookmarkStore.MAX_SAVED_MESSAGE)) else entry
+        }
+        val pids = entries.mapTo(HashSet()) { it.pid }
+        return SavedLog(
+            serial = current.selectedSerial,
+            deviceName = current.selectedDevice?.name ?: current.previousLog?.deviceName.orEmpty(),
+            entries = entries,
+            processNames = current.processNames.filterKeys { it in pids },
+        )
+    }
+
+    /**
+     * Loads the end of [serial]'s log from the previous IDE session into an empty log, before the stream
+     * starts. The stream then continues after its last line. Once per device until the user picks a device.
+     */
+    private suspend fun restoreLastLog(serial: String) {
+        if (serial.isEmpty() || serial == restoreTriedFor || !settings.state.keepLastLog) return
+        // Marked before the checks: a log emptied later (Clear, clear on app start) must not load old lines.
+        restoreTriedFor = serial
+        if (buffer.totalCount > 0 || _state.value.openedFileName.isNotEmpty()) return
+        val saved = withContext(context = Dispatchers.IO) {
+            lastLogStore.load(
+                serial = serial,
+                firstId = 1L,
+            )
+        } ?: return
+        // The user can pick another device or open a file while the file loads.
+        if (saved.entries.isEmpty() || _state.value.selectedSerial != serial || buffer.totalCount > 0 || _state.value.openedFileName.isNotEmpty()) return
+        previousProcessNames = saved.processNames
+        _state.update {
+            it.copy(
+                processNames = saved.processNames + it.processNames,
+                previousLog = PreviousLogUiModel(
+                    lastId = saved.entries.last().id,
+                    deviceName = saved.deviceName,
+                ),
+            )
+        }
+        refilter()
+        saved.entries.chunked(size = FILE_CHUNK).forEach {
+            ingest(
+                batch = it,
+                isRestored = true,
+            )
+        }
+        publish()
+        refreshContent()
+    }
+
+    // endregion
+
     // region Log files
 
     private fun openLogFile(file: File) {
@@ -817,6 +929,7 @@ class LogcatViewModel(
                 return@launch
             }
             saveSession()
+            saveLastLog()
             stopStreaming()
             clearLog()
             recorder.clear()
@@ -852,6 +965,8 @@ class LogcatViewModel(
             clearLog()
             recorder.clear()
             requestedPids.clear()
+            restoreTriedFor = ""
+            restoreLastLog(serial = _state.value.selectedSerial)
             val device = _state.value.selectedDevice
             if (device?.state == DeviceState.ONLINE) startStreaming(serial = device.serial)
             publishProblems()
@@ -886,6 +1001,9 @@ class LogcatViewModel(
         workScope.launch {
             clearLog()
             publish()
+            // Clear means the user is done with these lines, so the saved copy goes too.
+            val serial = _state.value.selectedSerial
+            if (serial.isNotEmpty()) launch(context = saveDispatcher) { lastLogStore.delete(serial = serial) }
         }
         val serial = _state.value.selectedSerial
         val device = _state.value.selectedDevice
@@ -906,8 +1024,11 @@ class LogcatViewModel(
         liveBookmarkIds.clear()
         bookmarkStore.onLogCleared()
         isDirty = true
+        isLastLogDirty = false
+        previousProcessNames = emptyMap()
         _state.update {
             it.copy(
+                previousLog = null,
                 selection = SelectionUiModel(),
                 toggledIds = emptySet(),
                 pausedNewCount = 0,
@@ -999,12 +1120,14 @@ class LogcatViewModel(
     }
 
     private fun toggleLevel(level: LogLevel) {
-        val current = _state.value.filter.levels
-        // Keep at least one level on, so the list never goes empty by accident.
-        if (level in current && current.size == 1) return
-        val levels = if (level in current) current - level else current + level
-        settings.state.levels = levels.sorted().joinToString(separator = ",") { it.name }
-        updateFilter { it.copy(levels = levels) }
+        // The toggles live in the search text now; the old saved toggles are cleared.
+        settings.state.levels = LogLevel.entries.joinToString(separator = ",") { it.name }
+        updateFilter {
+            LevelVisibility.toggle(
+                filter = it,
+                level = level,
+            )
+        }
     }
 
     private fun showOnlyTag(tag: String) {
@@ -1131,6 +1254,7 @@ class LogcatViewModel(
             colorizeTags = options.colorizeTags
             copyMessageOnly = options.copyMessageOnly
             expandJsonByDefault = options.expandJsonByDefault
+            clearOnAppLaunch = options.clearOnAppLaunch
             showTime = LogColumn.TIME in options.visibleColumns
             showProcess = LogColumn.PROCESS in options.visibleColumns
             showPackage = LogColumn.PACKAGE in options.visibleColumns
@@ -1453,15 +1577,25 @@ class LogcatViewModel(
             if (saved.showLevel) add(LogColumn.LEVEL)
         }
         val baseFilter = LogFilter(
-            levels = parseLevels(value = saved.levels.orEmpty()),
             isRegex = saved.isRegex,
             isMatchCase = saved.isMatchCase,
         )
         // First run ever: start like Android Studio, with package:mine.
         val startQuery = initialQuery ?: saved.lastFilter
+        val startFilter = baseFilter.withQueryString(text = startQuery ?: QueryTerm.Mine.text)
+        // Level toggles saved before they moved into the search text become a `level` term once.
+        val savedLevels = parseLevels(value = saved.levels.orEmpty())
+        saved.levels = LogLevel.entries.joinToString(separator = ",") { it.name }
         return LogcatState(
             selectedSerial = initialSerial,
-            filter = baseFilter.withQueryString(text = startQuery ?: QueryTerm.Mine.text),
+            filter = if (savedLevels.size == LogLevel.entries.size) {
+                startFilter
+            } else {
+                LevelVisibility.withVisible(
+                    filter = startFilter,
+                    levels = savedLevels,
+                )
+            },
             viewOptions = ViewOptionsUiModel(
                 softWrap = saved.softWrap,
                 compactRows = saved.compactRows,
@@ -1480,6 +1614,7 @@ class LogcatViewModel(
                 colorizeTags = saved.colorizeTags,
                 copyMessageOnly = saved.copyMessageOnly,
                 expandJsonByDefault = saved.expandJsonByDefault,
+                clearOnAppLaunch = saved.clearOnAppLaunch,
                 visibleColumns = columns,
                 columnWidths = mapOf(
                     LogColumn.TIME to saved.timeWidth,
@@ -1505,6 +1640,7 @@ class LogcatViewModel(
         const val RATES_INTERVAL_MILLIS = 1_000L
         const val PROBLEMS_INTERVAL_MILLIS = 500L
         const val HISTORY_SAVE_INTERVAL_MILLIS = 2_000L
+        const val LAST_LOG_SAVE_INTERVAL_MILLIS = 5_000L
         const val RECENT_CRASH_MILLIS = 60_000L
         const val CRASH_NOTICE_GAP_MILLIS = 5_000L
         const val NATIVE_BACKTRACE_SECONDS = 15L

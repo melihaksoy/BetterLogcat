@@ -4,6 +4,7 @@ import com.melihaksoy.betterlogcat.model.JsonContent
 import com.melihaksoy.betterlogcat.model.LogEntry
 import com.melihaksoy.betterlogcat.model.LogLevel
 import com.melihaksoy.betterlogcat.model.ProblemKind
+import com.melihaksoy.betterlogcat.network.HttpMessage
 import java.util.regex.PatternSyntaxException
 
 /** A [LogFilter] compiled once, then applied to many entries. */
@@ -42,7 +43,9 @@ class LogFilterMatcher(
 
     fun matches(entry: LogEntry): Boolean {
         if (entry.level !in running.levels) return false
-        for ((_, terms) in positiveByKey) {
+        for ((key, terms) in positiveByKey) {
+            // A start/end line is a divider for its app, not an ActivityManager line: a list of tags to show keeps it.
+            if (key == QueryKey.TAG && entry.processEvent != null) continue
             if (terms.none { it.matches(entry = entry) }) return false
         }
         if (negatives.any { it.matches(entry = entry) }) return false
@@ -53,6 +56,14 @@ class LogFilterMatcher(
     fun isTagVisible(tag: String): Boolean =
         (positiveTagTerms.isEmpty() || positiveTagTerms.any { it.matchesText(text = tag) }) &&
             negativeTagTerms.none { it.matchesText(text = tag) }
+
+    /** True when the level toggles and the `level` terms let [level] through. For the level toggles. */
+    fun isLevelVisible(level: LogLevel): Boolean {
+        val positives = positiveByKey[QueryKey.LEVEL].orEmpty()
+        return level in running.levels &&
+            (positives.isEmpty() || positives.any { it.matchesLevel(level = level) }) &&
+            negatives.none { it.term.key == QueryKey.LEVEL && it.matchesLevel(level = level) }
+    }
 
     /** True when the `package` terms let lines of [process] through. Other terms do not count. For the Tags panel. */
     fun isProcessVisible(process: String): Boolean =
@@ -119,12 +130,24 @@ class LogFilterMatcher(
         /** `=:` takes a comma list: `tag=:OkHttp,Garage` is either tag. */
         private val exactValues: Set<String> = term.value.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toHashSet()
         private val level: LogLevel? = parseLevel(value = term.value)
+
+        /** `level=:D,I` is exactly those levels; `level:W` is W and up. Null when a value is no level. */
+        private val exactLevels: Set<LogLevel>? = exactValues.map { parseLevel(value = it) }
+            .takeIf { values -> values.isNotEmpty() && null !in values }
+            ?.filterNotNull()
+            ?.toSet()
         private val ageMillis: Long? = parseAge(value = term.value)
+
+        /** Each of `404`, `4xx` or a comma list of them. Null when a value is no status pattern. */
+        private val statusPatterns: List<String>? = term.value.lowercase().split(',').map { it.trim() }
+            .takeIf { values -> values.all { statusRegex.matches(input = it) } }
 
         val isValid: Boolean = when {
             term.mode == MatchMode.REGEX && regex == null -> false
+            term.key == QueryKey.LEVEL && term.mode == MatchMode.EXACT -> exactLevels != null
             term.key == QueryKey.LEVEL && level == null -> false
             term.key == QueryKey.AGE && ageMillis == null -> false
+            term.key == QueryKey.STATUS && statusPatterns == null -> false
             else -> true
         }
 
@@ -138,10 +161,24 @@ class LogFilterMatcher(
                 QueryKey.NAME, QueryKey.CONTEXT -> true
                 QueryKey.PROCESS -> matchesText(text = processNames[entry.pid].orEmpty())
                 QueryKey.PID -> term.value.toIntOrNull() == entry.pid
-                QueryKey.LEVEL -> level != null && entry.level >= level
+                QueryKey.LEVEL -> matchesLevel(level = entry.level)
                 QueryKey.AGE -> ageMillis != null && entry.epochSeconds * 1_000 + entry.nanos / 1_000_000 >= nowEpochMillis - ageMillis
                 QueryKey.IS -> matchesIs(entry = entry)
+                QueryKey.METHOD -> HttpMessage.of(message = entry.message)?.method?.let { matchesText(text = it) } == true
+                QueryKey.STATUS -> HttpMessage.of(message = entry.message)?.statusCode?.let { matchesStatus(code = it) } == true
             }
+        }
+
+        /** Whether this `level` term lets [level] through. */
+        fun matchesLevel(level: LogLevel): Boolean {
+            if (!isValid) return !term.isNegated
+            return if (term.mode == MatchMode.EXACT) exactLevels.orEmpty().contains(level) else this.level != null && level >= this.level
+        }
+
+        private fun matchesStatus(code: Int): Boolean {
+            if (code <= 0) return false
+            val digits = code.toString()
+            return statusPatterns.orEmpty().any { pattern -> pattern.indices.all { pattern[it] == 'x' || pattern[it] == digits[it] } }
         }
 
         // A start/death line belongs to the app it is about, not to system_server that logged it.
@@ -176,6 +213,7 @@ class LogFilterMatcher(
             "problem" -> entry.problem != null
             "stacktrace" -> entry.hasStackFrames
             "json" -> entry.json is JsonContent.Found
+            "http" -> HttpMessage.of(message = entry.message) != null
             else -> false
         }
     }
@@ -184,6 +222,7 @@ class LogFilterMatcher(
         const val MAX_HIGHLIGHTS = 64
         const val MAX_CONTEXT = 50
         val ageRegex = Regex(pattern = """(\d+)([smhd])""")
+        val statusRegex = Regex(pattern = """[1-5x][0-9x]{2}""")
 
         fun parseLevel(value: String): LogLevel? = LogLevel.entries.firstOrNull {
             it.name.equals(value, ignoreCase = true) || it.letter.toString().equals(value, ignoreCase = true)

@@ -12,9 +12,9 @@ object CurlBuilder {
         val lines = message.lines()
         val first = lines.firstOrNull() ?: return null
         val (method, url) = when {
-            first.startsWith("REQUEST:") -> {
-                val method = lines.firstOrNull { it.startsWith("METHOD:") }?.substringAfter("METHOD:")?.trim() ?: "GET"
-                method to first.substringAfter("REQUEST:").trim()
+            first.startsWith(KtorLog.REQUEST) -> {
+                val method = KtorLog.method(message = message) ?: "GET"
+                method to first.substringAfter(KtorLog.REQUEST).trim()
             }
             first.startsWith("--> ") -> {
                 val parts = first.removePrefix("--> ").split(' ')

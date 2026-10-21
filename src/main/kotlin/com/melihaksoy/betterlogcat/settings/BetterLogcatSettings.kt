@@ -28,6 +28,9 @@ class BetterLogcatSettings : SimplePersistentStateComponent<BetterLogcatSettings
         /** When the project app starts, the log starts over with it. */
         var clearOnAppLaunch by property(defaultValue = false)
 
+        /** Saves the end of each device's log, so it shows again after an IDE restart. */
+        var keepLastLog by property(defaultValue = true)
+
         /** A crash or ANR shows an IDE notification while the tool window is hidden. */
         var notifyOnCrash by property(defaultValue = true)
 

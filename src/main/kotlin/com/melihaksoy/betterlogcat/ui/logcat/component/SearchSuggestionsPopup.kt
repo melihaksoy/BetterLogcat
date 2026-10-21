@@ -174,6 +174,8 @@ internal fun keyDescription(key: QueryKey): String = when (key) {
     QueryKey.IS -> BetterLogcatBundle.message("search.key.is")
     QueryKey.LINE -> BetterLogcatBundle.message("search.key.line")
     QueryKey.NAME -> BetterLogcatBundle.message("search.key.name")
+    QueryKey.METHOD -> BetterLogcatBundle.message("search.key.method")
+    QueryKey.STATUS -> BetterLogcatBundle.message("search.key.status")
 }
 
 // region Previews

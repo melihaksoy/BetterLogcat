@@ -42,7 +42,10 @@ class SavedFiltersTest {
             ),
         ).items.map { it.label }
 
-        assertEquals(listOf("age:", "context:", "is:", "level:", "line:", "message:", "name:", "package:", "package:mine", "pid:", "process:", "tag:"), labels)
+        assertEquals(
+            listOf("age:", "context:", "is:", "level:", "line:", "message:", "method:", "name:", "package:", "package:mine", "pid:", "process:", "status:", "tag:"),
+            labels,
+        )
     }
 
     @Test

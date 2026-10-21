@@ -18,16 +18,16 @@ class NetworkTracker {
     fun onEntry(entry: LogEntry): Boolean {
         val message = entry.message
         return when {
-            message.startsWith(KTOR_REQUEST) -> addRequest(
+            message.startsWith(KtorLog.REQUEST) -> addRequest(
                 entry = entry,
-                method = field(message = message, name = "METHOD:") ?: return false,
-                url = message.substringAfter(KTOR_REQUEST).lineSequence().first().trim(),
+                method = KtorLog.method(message = message) ?: return false,
+                url = message.substringAfter(KtorLog.REQUEST).lineSequence().first().trim(),
             )
-            message.startsWith(KTOR_RESPONSE) -> addResponse(
+            message.startsWith(KtorLog.RESPONSE) -> addResponse(
                 entry = entry,
-                method = field(message = message, name = "METHOD:") ?: return false,
+                method = KtorLog.method(message = message) ?: return false,
                 url = field(message = message, name = "FROM:") ?: return false,
-                status = message.substringAfter(KTOR_RESPONSE).trim().substringBefore(' ').substringBefore('\n').toIntOrNull() ?: 0,
+                status = message.substringAfter(KtorLog.RESPONSE).trim().substringBefore(' ').substringBefore('\n').toIntOrNull() ?: 0,
                 durationMillis = -1,
             )
             message.startsWith(OKHTTP_REQUEST) -> {
@@ -139,8 +139,6 @@ class NetworkTracker {
 
     private companion object {
         const val MAX_CALLS = 1_000
-        const val KTOR_REQUEST = "REQUEST:"
-        const val KTOR_RESPONSE = "RESPONSE:"
         const val OKHTTP_REQUEST = "--> "
         const val OKHTTP_RESPONSE = "<-- "
         const val OKHTTP_FAILED = "<-- HTTP FAILED: "

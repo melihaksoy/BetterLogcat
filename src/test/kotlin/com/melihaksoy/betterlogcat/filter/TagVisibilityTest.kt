@@ -1,5 +1,7 @@
 package com.melihaksoy.betterlogcat.filter
 
+import com.melihaksoy.betterlogcat.model.LogEntry
+import com.melihaksoy.betterlogcat.model.LogLevel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -120,6 +122,31 @@ class TagVisibilityTest {
         val filter = TagVisibility.showAll(filter = LogFilter().withQueryString(text = "package:mine tag:Ok -tag=:art crash"))
 
         assertEquals("package:mine crash ", filter.query)
+    }
+
+    @Test
+    fun `app start and end lines stay with a show list but not with a hide list`() {
+        val start = LogEntry(
+            id = 1,
+            epochSeconds = 1_791_540_000L,
+            nanos = 0,
+            pid = 1_822,
+            tid = 1_822,
+            level = LogLevel.INFO,
+            tag = "ActivityManager",
+            message = "Start proc 15011:com.example.app/u0a215 for next-top-activity {com.example.app/.MainActivity}",
+        )
+        val other = start.withMessage(message = "Background start not allowed")
+
+        fun matcher(query: String) = LogFilterMatcher(
+            filter = LogFilter().withQueryString(text = query),
+            processNames = mapOf(1_822 to "system_server"),
+            projectAppIds = setOf("com.example.app"),
+        )
+
+        assertTrue(matcher(query = "package:mine tag=:OkHttp,Garage").matches(entry = start))
+        assertFalse(matcher(query = "tag=:OkHttp,Garage").matches(entry = other))
+        assertFalse(matcher(query = "package:mine -tag=:ActivityManager").matches(entry = start))
     }
 
     private fun LogFilter.isTagVisible(tag: String): Boolean = LogFilterMatcher(

@@ -19,6 +19,7 @@ import com.intellij.openapi.project.Project
 import com.melihaksoy.betterlogcat.ide.BetterLogcatProjectService
 import com.melihaksoy.betterlogcat.ide.AppearanceStore
 import com.melihaksoy.betterlogcat.ide.BookmarkStore
+import com.melihaksoy.betterlogcat.ide.LastLogStore
 import com.melihaksoy.betterlogcat.ide.PackageAliasStore
 import com.melihaksoy.betterlogcat.ide.ProblemHistoryStore
 import com.melihaksoy.betterlogcat.ide.SourceNavigator
@@ -64,6 +65,7 @@ class LogcatPane(
         bookmarkStore = BookmarkStore.getInstance(project = project),
         tagNotesStore = TagNotesStore.getInstance(),
         problemHistoryStore = ProblemHistoryStore.getInstance(project = project),
+        lastLogStore = LastLogStore.default(),
     )
 
     private val paneActions = actions(this)
@@ -147,7 +149,11 @@ class LogcatPane(
     }
 
     override fun dispose() {
-        job.cancel()
+        try {
+            viewModel.saveLastLogNow()
+        } finally {
+            job.cancel()
+        }
     }
 
     private companion object {

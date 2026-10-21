@@ -1,6 +1,30 @@
 # Changelog
 
-## Unreleased
+## 0.13.0
+- Collapsed HTTP rows show the method next to the address (`REQUEST: GET /path`), and a Ktor response
+  shows how long the call took. Status codes are colored by class: 2xx, 3xx, 4xx, 5xx.
+- New search terms: `method:POST`, `status:404`, `status:4xx` and `is:http`.
+- The `V D I W E A` toggles write `level` terms into the search text (`level:W`, `-level=:V,I`), and a
+  typed `level` term sets the toggles.
+- Long term lists in the search field show short (`tag=:System.out,OkHttp +31`) until the cursor goes
+  into them.
+- Expanded JSON folds: click the line that opens a block (`▾`) to fold it to `▸ { … 12 keys }`. Works in
+  the log and in the network details.
+- Scrolled deep into a JSON body, a bar at the top shows the blocks around you (`{ } › results › [3] ›
+  stats`). Click one to fold it without scrolling back to its first line.
+- "Clear the log when the project app starts" moved from Settings to a toggle in the toolbar, next to
+  Soft-wrap.
+- The log of each device comes back after an IDE restart: the last 10,000 lines show under a "previous
+  IDE session" divider, and live lines continue after it. Switching to another device and back also
+  keeps the log. Clear deletes the saved copy. Turn it off in Settings › Tools › Better Logcat.
+- Fixed: `package:mine` missed an app id that Gradle sets at build time, for example after a switch to
+  another build variant. The ids of the selected run configuration and of apps launched from the IDE now
+  count too, and a launch updates the filter at once.
+- Fixed: toolbar buttons kept a faint background after a click.
+- Fixed: app start and end dividers were hidden when the Tags panel turned a long hide list into a
+  `tag=:` show list.
+- Fixed: Ktor 2 logs (`METHOD: HttpMethod(value=GET)`) showed that whole text as the method in the network
+  panel and in Copy as cURL.
 - Fixed: the Network panel showed the method and address in the editor's text color, which could be dark
   on a dark panel.
 

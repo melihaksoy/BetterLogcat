@@ -20,6 +20,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +38,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -141,7 +144,9 @@ private fun MessagePieces(
     keywords: KeywordHighlighter,
 ) {
     val textColor = JewelTheme.globalColors.text.normal
-    val pieces = remember(entry, colors, keywords, textColor) {
+    // Folded JSON blocks, by their place among the blocks of this message.
+    var jsonFolds by remember(entry) { mutableStateOf(value = emptySet<Int>()) }
+    val pieces = remember(entry, colors, keywords, textColor, jsonFolds) {
         LogListLayout.split(
             text = buildMessageText(
                 entry = entry,
@@ -152,15 +157,50 @@ private fun MessagePieces(
                 colors = colors,
                 highlighter = SearchHighlighter.None,
                 keywords = keywords,
+                jsonFolds = jsonFolds,
                 labels = messageLabels(),
                 onOpenFrame = {},
                 onOpenUrl = { BrowserUtil.browse(it) },
                 onShowAll = {},
+                onToggleJsonFold = { block -> jsonFolds = if (block in jsonFolds) jsonFolds - block else jsonFolds + block },
             ),
             linesPerPiece = PIECE_LINES,
         )
     }
     val listState = rememberLazyListState()
+    val textStyle = JewelTheme.editorTextStyle
+    val lineHeight = rememberTextMeasurer().measure(
+        text = "0",
+        style = textStyle,
+    ).size.height
+    // JSON blocks around the top line. Pieces have no padding, so the scroll offset counts lines.
+    val jsonPath by remember(pieces, lineHeight) {
+        derivedStateOf {
+            val piece = pieces.getOrNull(index = listState.firstVisibleItemIndex)
+            if (piece == null || lineHeight <= 0) {
+                emptyList()
+            } else {
+                JsonPath.at(
+                    text = piece,
+                    line = listState.firstVisibleItemScrollOffset / lineHeight,
+                )
+            }
+        }
+    }
+    // Folded from the JSON path bar: scroll back to that block once the new pieces are in.
+    var pendingFold by remember(entry) { mutableStateOf<Int?>(value = null) }
+    LaunchedEffect(pieces) {
+        val block = pendingFold ?: return@LaunchedEffect
+        pendingFold = null
+        val place = JsonPath.find(
+            pieces = pieces,
+            block = block,
+        ) ?: return@LaunchedEffect
+        listState.scrollToItem(
+            index = place.piece,
+            scrollOffset = (place.line - FOLD_LINES_ABOVE).coerceAtLeast(minimumValue = 0) * lineHeight,
+        )
+    }
     Box(modifier = modifier) {
         SelectionContainer {
             LazyColumn(
@@ -172,10 +212,22 @@ private fun MessagePieces(
                 itemsIndexed(items = pieces) { _, piece ->
                     Text(
                         text = piece,
-                        style = JewelTheme.editorTextStyle,
+                        style = textStyle,
                     )
                 }
             }
+        }
+        if (jsonPath.isNotEmpty()) {
+            JsonPathBar(
+                modifier = Modifier.align(alignment = Alignment.TopStart),
+                path = jsonPath,
+                colors = colors,
+                textStyle = textStyle,
+                onFold = { item ->
+                    jsonFolds = jsonFolds + item.block
+                    pendingFold = item.block
+                },
+            )
         }
         VerticalScrollbar(
             scrollState = listState,
@@ -349,4 +401,7 @@ private fun Tab(
 }
 
 private const val PIECE_LINES = 20
+
+/** Lines left above a block folded from the JSON path bar, so its line shows under the bar. */
+private const val FOLD_LINES_ABOVE = 2
 private val TAB_UNDERLINE = 2.dp

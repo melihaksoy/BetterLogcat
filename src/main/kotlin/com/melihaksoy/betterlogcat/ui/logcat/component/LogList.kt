@@ -146,6 +146,12 @@ internal fun LogList(
     val currentTextSelection by rememberUpdatedState(newValue = textSelection)
     // Expanded messages past the size cap that the user opened in full with "Show all".
     var fullyShownIds by remember { mutableStateOf(value = emptySet<Long>()) }
+    // Folded JSON blocks per entry, by their place among the blocks of that message.
+    var jsonFolds by remember { mutableStateOf(value = emptyMap<Long, Set<Int>>()) }
+    val toggleJsonFold = { id: Long, block: Int ->
+        val folds = jsonFolds[id].orEmpty()
+        jsonFolds = jsonFolds + (id to if (block in folds) folds - block else folds + block)
+    }
     var liveWidths by remember(state.viewOptions.columnWidths) { mutableStateOf(value = state.viewOptions.columnWidths) }
     val viewOptions = state.viewOptions.copy(columnWidths = liveWidths)
     val highlighter = remember(state.filter.query, state.filter.isRegex, state.filter.isMatchCase) {
@@ -209,11 +215,27 @@ internal fun LogList(
             colors = colors,
         )
     }
+    // The last line from the previous IDE session that the filter shows. The marker goes under it.
+    val previousLogEndId = remember(state.entries, state.previousLog) {
+        state.previousLog?.let { previous ->
+            val found = state.entries.binarySearchBy(key = previous.lastId) { it.id }
+            state.entries.getOrNull(index = if (found >= 0) found else -found - 2)?.id
+        }
+    }
+    val callsByEntry = remember(state.networkCalls) {
+        buildMap {
+            state.networkCalls.forEach { call ->
+                if (call.requestEntryId != NetworkCall.NO_ENTRY) put(call.requestEntryId, call)
+                if (call.responseEntryId != NetworkCall.NO_ENTRY) put(call.responseEntryId, call)
+            }
+        }
+    }
     val pieceCache = remember { PieceCache() }
     val layout = buildLayout(
         state = state,
         textSelection = textSelection,
         fullyShownIds = fullyShownIds,
+        jsonFolds = jsonFolds,
         highlighter = highlighter,
         keywords = keywords,
         urls = urls,
@@ -223,16 +245,36 @@ internal fun LogList(
         cache = pieceCache,
         onOpenFrame = { currentOnIntent(LogcatIntent.OpenFrame(frame = it)) },
         onShowAll = { id -> fullyShownIds = fullyShownIds + id },
+        onToggleJsonFold = toggleJsonFold,
     )
     val currentLayout by rememberUpdatedState(newValue = layout)
+    val currentCallsByEntry by rememberUpdatedState(newValue = callsByEntry)
     // Without soft-wrap, long lines scroll sideways: header and rows share one horizontal scroll.
     val isScrollingSideways = !viewOptions.softWrap
     val horizontalState = rememberScrollState()
-    val charWidth = with(density) {
-        rememberTextMeasurer().measure(
-            text = "0",
-            style = textStyle,
-        ).size.width.toDp()
+    val charSize = rememberTextMeasurer().measure(
+        text = "0",
+        style = textStyle,
+    ).size
+    val charWidth = with(density) { charSize.width.toDp() }
+    // Folded from the JSON path bar: scroll back to that block once the new layout is in.
+    var pendingFold by remember { mutableStateOf<Pair<Long, Int>?>(value = null) }
+    LaunchedEffect(pendingFold) {
+        val (id, block) = pendingFold ?: return@LaunchedEffect
+        pendingFold = null
+        val shown = currentLayout
+        val entryIndex = shown.entries.indexOfFirst { it.id == id }
+        if (entryIndex < 0) return@LaunchedEffect
+        val place = shown.chunked[entryIndex]?.let {
+            JsonPath.find(
+                pieces = it,
+                block = block,
+            )
+        }
+        listState.scrollToItem(
+            index = shown.firstItemOf(entryIndex = entryIndex) + (place?.piece ?: 0),
+            scrollOffset = ((place?.line ?: 0) - FOLD_LINES_ABOVE).coerceAtLeast(minimumValue = 0) * charSize.height,
+        )
     }
     // The widest line seen on screen, in characters. It only grows, so the range stays put while scrolling down.
     var widestChars by remember(isScrollingSideways, state.filter) { mutableIntStateOf(value = 0) }
@@ -247,7 +289,11 @@ internal fun LogList(
                 val json = entry.json as? JsonContent.Found
                 when {
                     piece != null -> longestLine(text = piece)
-                    entry.isExpandable && !currentState.isExpanded(entry = entry) -> collapsedLength(entry = entry)
+                    entry.isExpandable && !currentState.isExpanded(entry = entry) -> collapsedLength(
+                        entry = entry,
+                        call = currentCallsByEntry[entry.id],
+                        labels = labels,
+                    )
                     // Pretty JSON is shorter per line than the one-line JSON in the message.
                     json != null && currentState.viewOptions.prettyJson -> maxOf(
                         longestLine(text = json.pretty),
@@ -279,14 +325,6 @@ internal fun LogList(
         selectionLeadId = state.selection.leadId,
         toggledIds = state.toggledIds,
     )
-    val callsByEntry = remember(state.networkCalls) {
-        buildMap {
-            state.networkCalls.forEach { call ->
-                if (call.requestEntryId != NetworkCall.NO_ENTRY) put(call.requestEntryId, call)
-                if (call.responseEntryId != NetworkCall.NO_ENTRY) put(call.responseEntryId, call)
-            }
-        }
-    }
     val coroutineScope = rememberCoroutineScope()
     // The expand toggle on a row in text selection mode leaves that mode. The message shows expanded
     // there whatever its real state is, so the toggle always collapses it.
@@ -586,74 +624,86 @@ internal fun LogList(
                         val isNextSelected = state.entries.getOrNull(index = index + 1)?.id in state.selection.selectedIds
                         val pieces = layout.chunked[index]
                         val event = entry.processEvent
-                        if (ref.chunk == 0 && event != null) {
-                            ProcessMarkerRow(
-                                entry = entry,
-                                event = event,
-                                displayName = PackageAliasStore.display(
-                                    processName = event.packageName,
-                                    aliases = state.packageAliases,
-                                ),
-                                isSelected = isSelected,
-                                colors = colors,
-                                textStyle = textStyle,
-                            )
-                        } else if (ref.chunk == 0) {
-                            val gutter = GutterUiModel(
-                                isBookmarked = entry.id in state.bookmarkedIds,
-                                problem = entry.problem,
-                                call = callsByEntry[entry.id],
-                            )
-                            LogRow(
-                                // A context line (`context:N`) is there to read around a match, so it draws faint.
-                                modifier = Modifier.alpha(alpha = if (entry.id in state.contextIds) CONTEXT_ALPHA else 1f),
-                                gutter = gutter,
-                                tagDescription = TagDescriptions.describe(
-                                    tag = entry.tag,
-                                    userNotes = state.tagNotes,
-                                ),
-                                onCopyJson = { onIntent(LogcatIntent.CopyEntry(id = entry.id, mode = CopyMode.JSON_PRETTY)) },
-                                onOpenInEditor = { onOpenInEditor(entry) },
-                                onGutterClick = { point ->
-                                    if (gutter.hasMenu) onGutterMenu(entry, gutter, point) else onIntent(LogcatIntent.ToggleBookmark(id = entry.id))
-                                },
-                                entry = entry,
-                                previous = state.entries.getOrNull(index = index - 1),
-                                processName = PackageAliasStore.display(
-                                    processName = state.processNames[entry.pid].orEmpty(),
-                                    aliases = state.packageAliases,
-                                ),
-                                isSelected = isSelected,
-                                keywords = keywords,
-                                urls = urls,
-                                isFullyShown = entry.id in fullyShownIds,
-                                onShowAll = { fullyShownIds = fullyShownIds + entry.id },
-                                messageOverride = pieces?.first(),
-                                isSelectedAbove = state.entries.getOrNull(index = index - 1)?.id in state.selection.selectedIds,
-                                // A split message continues below, so the outline does too.
-                                isSelectedBelow = isNextSelected || pieces != null,
-                                // A message in text selection mode shows in full, so its toggle shows expanded too.
-                                isExpanded = state.isExpanded(entry = entry) || textSelection.cellFor(id = entry.id) == SelectableCell.MESSAGE,
-                                viewOptions = viewOptions,
-                                highlighter = highlighter,
-                                colors = colors,
-                                textStyle = textStyle,
-                                isStacked = isStacked,
-                                selectedCell = textSelection.cellFor(id = entry.id),
-                                rawProcessName = state.processNames[entry.pid].orEmpty(),
-                                onToggleExpanded = { toggleExpanded(entry) },
-                                onOpenFrame = { onIntent(LogcatIntent.OpenFrame(frame = it)) },
-                            )
-                        } else if (pieces != null) {
-                            LogContinuationRow(
-                                text = pieces[ref.chunk],
-                                indent = if (isStacked) messageIndentStacked else messageIndent,
-                                isSelected = isSelected,
-                                hasBottomOutline = ref.chunk == pieces.lastIndex && !isNextSelected,
-                                isSingleLine = !viewOptions.softWrap,
-                                colors = colors,
-                                textStyle = textStyle,
-                            )
+                        Column {
+                            if (ref.chunk == 0 && event != null) {
+                                ProcessMarkerRow(
+                                    entry = entry,
+                                    event = event,
+                                    displayName = PackageAliasStore.display(
+                                        processName = event.packageName,
+                                        aliases = state.packageAliases,
+                                    ),
+                                    isSelected = isSelected,
+                                    colors = colors,
+                                    textStyle = textStyle,
+                                )
+                            } else if (ref.chunk == 0) {
+                                val gutter = GutterUiModel(
+                                    isBookmarked = entry.id in state.bookmarkedIds,
+                                    problem = entry.problem,
+                                    call = callsByEntry[entry.id],
+                                )
+                                LogRow(
+                                    // A context line (`context:N`) is there to read around a match, so it draws faint.
+                                    modifier = Modifier.alpha(alpha = if (entry.id in state.contextIds) CONTEXT_ALPHA else 1f),
+                                    gutter = gutter,
+                                    tagDescription = TagDescriptions.describe(
+                                        tag = entry.tag,
+                                        userNotes = state.tagNotes,
+                                    ),
+                                    onCopyJson = { onIntent(LogcatIntent.CopyEntry(id = entry.id, mode = CopyMode.JSON_PRETTY)) },
+                                    onOpenInEditor = { onOpenInEditor(entry) },
+                                    onGutterClick = { point ->
+                                        if (gutter.hasMenu) onGutterMenu(entry, gutter, point) else onIntent(LogcatIntent.ToggleBookmark(id = entry.id))
+                                    },
+                                    entry = entry,
+                                    previous = state.entries.getOrNull(index = index - 1),
+                                    processName = PackageAliasStore.display(
+                                        processName = state.processNames[entry.pid].orEmpty(),
+                                        aliases = state.packageAliases,
+                                    ),
+                                    isSelected = isSelected,
+                                    keywords = keywords,
+                                    urls = urls,
+                                    isFullyShown = entry.id in fullyShownIds,
+                                    onShowAll = { fullyShownIds = fullyShownIds + entry.id },
+                                    jsonFolds = jsonFolds[entry.id].orEmpty(),
+                                    onToggleJsonFold = { toggleJsonFold(entry.id, it) },
+                                    messageOverride = pieces?.first(),
+                                    isSelectedAbove = state.entries.getOrNull(index = index - 1)?.id in state.selection.selectedIds,
+                                    // A split message continues below, so the outline does too.
+                                    isSelectedBelow = isNextSelected || pieces != null,
+                                    // A message in text selection mode shows in full, so its toggle shows expanded too.
+                                    isExpanded = state.isExpanded(entry = entry) || textSelection.cellFor(id = entry.id) == SelectableCell.MESSAGE,
+                                    viewOptions = viewOptions,
+                                    highlighter = highlighter,
+                                    colors = colors,
+                                    textStyle = textStyle,
+                                    isStacked = isStacked,
+                                    selectedCell = textSelection.cellFor(id = entry.id),
+                                    rawProcessName = state.processNames[entry.pid].orEmpty(),
+                                    onToggleExpanded = { toggleExpanded(entry) },
+                                    onOpenFrame = { onIntent(LogcatIntent.OpenFrame(frame = it)) },
+                                )
+                            } else if (pieces != null) {
+                                LogContinuationRow(
+                                    text = pieces[ref.chunk],
+                                    indent = if (isStacked) messageIndentStacked else messageIndent,
+                                    isSelected = isSelected,
+                                    hasBottomOutline = ref.chunk == pieces.lastIndex && !isNextSelected,
+                                    isSingleLine = !viewOptions.softWrap,
+                                    colors = colors,
+                                    textStyle = textStyle,
+                                )
+                            }
+                            if (entry.id == previousLogEndId && ref.chunk == (pieces?.lastIndex ?: 0)) {
+                                PreviousLogMarkerRow(
+                                    entry = entry,
+                                    deviceName = state.previousLog?.deviceName.orEmpty(),
+                                    colors = colors,
+                                    textStyle = textStyle,
+                                )
+                            }
                         }
                     }
                 }
@@ -667,17 +717,44 @@ internal fun LogList(
                     }
                 }
                 val isStickyBarShown = firstVisibleRef.chunk > 0 || isInsideTextBox
+                // JSON blocks around the top line of a split message. Pieces have no padding, so the scroll offset counts lines.
+                val jsonPath by remember(layout) {
+                    derivedStateOf {
+                        val ref = layout.itemAt(item = listState.firstVisibleItemIndex)
+                        val piece = layout.chunked[ref.entryIndex]?.getOrNull(index = ref.chunk)
+                        if (ref.chunk == 0 || piece == null || charSize.height <= 0) {
+                            emptyList()
+                        } else {
+                            JsonPath.at(
+                                text = piece,
+                                line = listState.firstVisibleItemScrollOffset / charSize.height,
+                            )
+                        }
+                    }
+                }
                 if (isStickyBarShown) {
                     state.entries.getOrNull(index = firstVisibleRef.entryIndex)?.let { entry ->
-                        StickyEntryBar(
-                            modifier = Modifier.align(alignment = Alignment.TopStart),
-                            entry = entry,
-                            colors = colors,
-                            textStyle = textStyle,
-                            onCollapse = { collapseEntry(firstVisibleRef.entryIndex) },
-                            onCopyJson = { onIntent(LogcatIntent.CopyEntry(id = entry.id, mode = CopyMode.JSON_PRETTY)) },
-                            onOpenInEditor = { onOpenInEditor(entry) },
-                        )
+                        Column(modifier = Modifier.align(alignment = Alignment.TopStart)) {
+                            StickyEntryBar(
+                                entry = entry,
+                                colors = colors,
+                                textStyle = textStyle,
+                                onCollapse = { collapseEntry(firstVisibleRef.entryIndex) },
+                                onCopyJson = { onIntent(LogcatIntent.CopyEntry(id = entry.id, mode = CopyMode.JSON_PRETTY)) },
+                                onOpenInEditor = { onOpenInEditor(entry) },
+                            )
+                            if (jsonPath.isNotEmpty()) {
+                                JsonPathBar(
+                                    path = jsonPath,
+                                    colors = colors,
+                                    textStyle = textStyle,
+                                    onFold = { item ->
+                                        toggleJsonFold(entry.id, item.block)
+                                        pendingFold = entry.id to item.block
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
                 if (isFindOpen) {
@@ -1041,6 +1118,7 @@ private class PieceCache {
 private data class PieceKey(
     val entry: LogEntry,
     val isFullyShown: Boolean,
+    val jsonFolds: Set<Int>,
     val prettyJson: Boolean,
     val highlighter: SearchHighlighter,
     val keywords: KeywordHighlighter,
@@ -1054,6 +1132,7 @@ private fun buildLayout(
     state: LogcatState,
     textSelection: TextSelectionUiModel,
     fullyShownIds: Set<Long>,
+    jsonFolds: Map<Long, Set<Int>>,
     highlighter: SearchHighlighter,
     keywords: KeywordHighlighter,
     urls: UrlShortener,
@@ -1063,6 +1142,7 @@ private fun buildLayout(
     cache: PieceCache,
     onOpenFrame: (StackFrame) -> Unit,
     onShowAll: (Long) -> Unit,
+    onToggleJsonFold: (Long, Int) -> Unit,
 ): LogListLayout {
     val chunked = HashMap<Int, List<AnnotatedString>>()
     state.entries.forEachIndexed { index, entry ->
@@ -1071,10 +1151,12 @@ private fun buildLayout(
         if (!state.isExpanded(entry = entry)) return@forEachIndexed
         val textColor = levelTextColors.getValue(entry.level)
         val isFullyShown = entry.id in fullyShownIds
+        val folds = jsonFolds[entry.id].orEmpty()
         val pieces = cache.getOrPut(
             key = PieceKey(
                 entry = entry,
                 isFullyShown = isFullyShown,
+                jsonFolds = folds,
                 prettyJson = state.viewOptions.prettyJson,
                 highlighter = highlighter,
                 keywords = keywords,
@@ -1094,10 +1176,12 @@ private fun buildLayout(
                     highlighter = highlighter,
                     keywords = keywords,
                     urls = urls,
+                    jsonFolds = folds,
                     labels = labels,
                     onOpenFrame = onOpenFrame,
                     onOpenUrl = { BrowserUtil.browse(it) },
                     onShowAll = { onShowAll(entry.id) },
+                    onToggleJsonFold = { onToggleJsonFold(entry.id, it) },
                 ),
                 linesPerPiece = LINES_PER_PIECE,
             )
@@ -1116,6 +1200,9 @@ private const val FIND_DEBOUNCE_MILLIS = 120L
 private const val FIND_REFRESH_MILLIS = 400L
 private const val FIND_COLOR = 0xFFFF9F1AL
 private const val LINES_PER_PIECE = 20
+
+/** Lines left above a block folded from the JSON path bar, so its line shows under the sticky bars. */
+private const val FOLD_LINES_ABOVE = 3
 private const val KEY_MENU_X = 40f
 
 private class ClickTracker {

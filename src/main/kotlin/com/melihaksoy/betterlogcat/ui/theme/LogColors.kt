@@ -42,6 +42,14 @@ data class LogColors(
         LogLevel.ASSERT -> assert
     }
 
+    /** 2xx info, 3xx link, 4xx warn, else (5xx, a failed call) error. */
+    fun httpStatus(statusCode: Int): Color = when (statusCode) {
+        in 200..299 -> info
+        in 300..399 -> link
+        in 400..499 -> warn
+        else -> error
+    }
+
     /** This palette with the user's level colors on top. */
     fun withLevelColors(overrides: Map<LogLevel, Long>): LogColors {
         if (overrides.isEmpty()) return this

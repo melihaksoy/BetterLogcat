@@ -8,8 +8,12 @@ interface StreamLogcatInteractor {
     operator fun invoke(request: LogcatRequest): EitherFlow<List<LogEntry>>
 }
 
-/** Start point of the stream. [sinceEpochNanos] of 0 dumps the whole device buffer first, -1 shows only new entries. */
+/**
+ * Start point of the stream. [sinceEpochNanos] of 0 dumps the whole device buffer first, -1 shows only new entries.
+ * Ids of new entries start above [afterId], so they stay above lines already in the log.
+ */
 data class LogcatRequest(
     val serial: String,
     val sinceEpochNanos: Long,
+    val afterId: Long = 0L,
 )

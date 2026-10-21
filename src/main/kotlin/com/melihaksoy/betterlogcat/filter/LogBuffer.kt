@@ -226,6 +226,9 @@ class LogBuffer(capacity: Int) {
         all.forEach(action)
     }
 
+    /** The newest [count] entries, hidden ones too, oldest first. */
+    fun lastEntries(count: Int): List<LogEntry> = ArrayList(all.subList((all.size - count).coerceAtLeast(minimumValue = 0), all.size))
+
     private fun trim() {
         if (all.size <= capacity) return
         // Drop an extra 10 % so trimming does not run on every batch.

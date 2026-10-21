@@ -130,12 +130,15 @@ internal object LogcatPreviewData {
 
     val filteredState = logsState.copy(
         filter = LogFilter(
-            levels = setOf(LogLevel.WARN, LogLevel.ERROR, LogLevel.ASSERT),
             query = "pokemon",
             terms = listOf(
                 QueryTerm(
                     key = QueryKey.PACKAGE,
                     value = "com.example.pokedex",
+                ),
+                QueryTerm(
+                    key = QueryKey.LEVEL,
+                    value = "W",
                 ),
                 QueryTerm(
                     key = QueryKey.TAG,

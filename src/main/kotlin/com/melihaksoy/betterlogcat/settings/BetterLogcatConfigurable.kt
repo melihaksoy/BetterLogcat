@@ -8,6 +8,7 @@ import com.intellij.ui.dsl.builder.bindSelected
 import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
+import com.melihaksoy.betterlogcat.ide.LastLogStore
 
 class BetterLogcatConfigurable : BoundConfigurable(BetterLogcatBundle.message("settings.displayName")) {
 
@@ -48,12 +49,15 @@ class BetterLogcatConfigurable : BoundConfigurable(BetterLogcatBundle.message("s
                         )
                 }
                 row {
-                    checkBox(BetterLogcatBundle.message("settings.clearOnAppLaunch"))
+                    checkBox(BetterLogcatBundle.message("settings.keepLastLog"))
                         .bindSelected(
-                            getter = { state.clearOnAppLaunch },
-                            setter = { state.clearOnAppLaunch = it },
+                            getter = { state.keepLastLog },
+                            setter = { isOn ->
+                                state.keepLastLog = isOn
+                                if (!isOn) LastLogStore.default().deleteAll()
+                            },
                         )
-                        .comment(BetterLogcatBundle.message("settings.clearOnAppLaunch.comment"))
+                        .comment(BetterLogcatBundle.message("settings.keepLastLog.comment", LastLogStore.MAX_ENTRIES))
                 }
             }
             group(BetterLogcatBundle.message("settings.group.problems")) {

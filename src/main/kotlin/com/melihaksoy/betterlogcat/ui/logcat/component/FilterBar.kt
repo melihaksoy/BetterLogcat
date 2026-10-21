@@ -42,10 +42,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
+import com.melihaksoy.betterlogcat.filter.LevelVisibility
 import com.melihaksoy.betterlogcat.filter.LogFilter
 import com.melihaksoy.betterlogcat.filter.QueryKey
 import com.melihaksoy.betterlogcat.filter.QueryParser
 import com.melihaksoy.betterlogcat.filter.QueryTerm
+import com.melihaksoy.betterlogcat.filter.TermFold
+import com.melihaksoy.betterlogcat.filter.TermFolding
 import com.melihaksoy.betterlogcat.ui.logcat.model.SavedFiltersUiModel
 import com.intellij.openapi.util.SystemInfo
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -100,7 +103,7 @@ internal fun FilterBar(
                 onIntent = onIntent,
             )
             LevelSelector(
-                levels = filter.levels,
+                levels = remember(filter) { LevelVisibility.visible(filter = filter) },
                 colors = colors,
                 onToggle = { onIntent(LogcatIntent.ToggleLevel(level = it)) },
             )
@@ -137,8 +140,6 @@ private fun SearchField(
         }
     }
 
-    // Terms stay in the text, colored like chips, as in Android Studio's Logcat.
-    val termColors = rememberTermColors(colors = colors)
     var isFocused by remember { mutableStateOf(value = false) }
     var isDismissed by remember { mutableStateOf(value = false) }
     var isForced by remember { mutableStateOf(value = false) }
@@ -146,6 +147,17 @@ private fun SearchField(
     var fieldSize by remember { mutableStateOf(value = IntSize.Zero) }
     val text = queryState.text.toString()
     val cursor = queryState.selection.end
+    val folds = remember(text, cursor, isFocused) {
+        TermFolding.folds(
+            text = text,
+            cursor = if (isFocused) cursor else -1,
+        )
+    }
+    // Terms stay in the text, colored like chips, as in Android Studio's Logcat.
+    val termColors = rememberTermColors(
+        colors = colors,
+        folds = folds,
+    )
     val suggestions = remember(text, cursor, suggestionContext) {
         QuerySuggestions.suggest(
             text = text,
@@ -324,12 +336,26 @@ internal fun LevelSelector(
     }
 }
 
+/**
+ * Colors every term and shows long values short ([folds]). Styles do not move with a later replace, so
+ * every replace runs first (from the end), then the styles go on at the shifted places.
+ */
 @Composable
-private fun rememberTermColors(colors: LogColors): OutputTransformation {
+private fun rememberTermColors(
+    colors: LogColors,
+    folds: List<TermFold>,
+): OutputTransformation {
     val normal = JewelTheme.globalColors.text.normal
-    return remember(colors, normal) {
+    return remember(colors, normal, folds) {
         OutputTransformation {
-            QueryParser.termRanges(text = asCharSequence().toString()).forEach { (range, term) ->
+            val terms = QueryParser.termRanges(text = asCharSequence().toString())
+            // Folds come from the last composition; a fold that does not sit inside its term is stale.
+            val applied = terms.map { (range, _) -> folds.firstOrNull { it.range.last == range.last && it.range.first > range.first } }
+            applied.asReversed().forEach { fold -> fold?.let { replace(it.range.first, it.range.last + 1, it.text) } }
+            var shift = 0
+            terms.forEachIndexed { index, (range, term) ->
+                val start = range.first + shift
+                applied[index]?.let { shift += it.text.length - (it.range.last + 1 - it.range.first) }
                 val color = termColor(
                     term = term,
                     colors = colors,
@@ -340,8 +366,8 @@ private fun rememberTermColors(colors: LogColors): OutputTransformation {
                         color = color,
                         background = color.copy(alpha = TERM_TINT),
                     ),
-                    range.first,
-                    range.last + 1,
+                    start,
+                    range.last + 1 + shift,
                 )
             }
         }
@@ -357,10 +383,14 @@ private fun termColor(
 ): Color = when {
     term.isNegated -> colors.muted
     term.key == QueryKey.TAG -> colors.tag(tag = term.value)
-    term.key == QueryKey.LEVEL -> LogLevel.entries
-        .firstOrNull { it.name.equals(term.value, ignoreCase = true) || it.letter.toString().equals(term.value, ignoreCase = true) }
-        ?.let { colors.level(level = it) }
-        ?: colors.error
+    // A list (`level=:E,A`) takes the color of its first level.
+    term.key == QueryKey.LEVEL -> term.value.substringBefore(',').let { value ->
+        LogLevel.entries
+            .firstOrNull { it.name.equals(value, ignoreCase = true) || it.letter.toString().equals(value, ignoreCase = true) }
+            ?.let { colors.level(level = it) }
+            ?: colors.error
+    }
+    term.key == QueryKey.STATUS -> term.value.firstOrNull()?.digitToIntOrNull()?.let { colors.httpStatus(statusCode = it * 100) } ?: normal
     term.key == QueryKey.PACKAGE -> colors.link
     else -> normal
 }

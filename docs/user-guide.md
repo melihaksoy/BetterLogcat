@@ -12,7 +12,7 @@ From left to right:
 | Group | Buttons |
 |---|---|
 | Source | device picker (also **Pair Device over Wi-Fi…**), package picker |
-| Log | Find, Pause/Resume, Clear, Soft-wrap |
+| Log | Find, Pause/Resume, Clear, Soft-wrap, Clear on app start |
 | Panels | Tags, Network, Bookmarks, Problems |
 | Messages | Expand all, Collapse all |
 | Capture | Screenshot, Screen record, Export menu |
@@ -74,6 +74,7 @@ The narrow column at the left of each row:
 - Tags sort by count, busiest first, with a per-second sparkline. With a project app known, they split into
   **Your app** and **Other**.
 - The **checkbox** shows or hides a tag. The panel writes `tag=:` / `-tag=:` terms into the search text.
+  A `tag=:` list keeps the app start and end lines; hide them with `-tag=:ActivityManager`.
 - Hover a row for **only** (show only this tag).
 - Click a row to select it; Cmd/Ctrl+click and Shift+click select more.
 - **Groups:** drag selected tags onto another tag to make a new group ("Group 1", "Group 2" …), onto a group to
@@ -135,7 +136,7 @@ Retrofit …), package aliases, retrace, with a live preview. Changes apply at o
 | Keep at most this many entries | 100,000 |
 | Show the existing device log when a device connects | on |
 | Clear also clears the log on the device | on |
-| Clear the log when the project app starts | off |
+| Keep the last log of each device after an IDE restart | on |
 | Keep bookmarks after Clear and IDE restart | on |
 | Notify me of a crash or ANR while the tool window is hidden | on |
 | Keep problem sessions for this many days | 30 |

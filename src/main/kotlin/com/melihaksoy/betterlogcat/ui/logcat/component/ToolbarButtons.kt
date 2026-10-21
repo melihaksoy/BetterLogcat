@@ -17,6 +17,7 @@ import org.jetbrains.jewel.ui.icons.AllIconsKeys
 
 private val BUTTON_SIZE = 26.dp
 
+// Not focusable, like IDE toolbar buttons: a focused Jewel button keeps a background after the click.
 @Composable
 internal fun ToolbarIconButton(
     modifier: Modifier = Modifier,
@@ -30,6 +31,7 @@ internal fun ToolbarIconButton(
             onClick = onClick,
             modifier = modifier.size(BUTTON_SIZE),
             enabled = isEnabled,
+            focusable = false,
         ) {
             Icon(
                 key = iconKey,
@@ -52,6 +54,7 @@ internal fun ToolbarToggleButton(
             value = isSelected,
             onValueChange = onToggle,
             modifier = modifier.size(BUTTON_SIZE),
+            focusable = false,
         ) {
             Icon(
                 key = iconKey,

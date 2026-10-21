@@ -29,6 +29,8 @@ data class ViewOptionsUiModel(
     val copyMessageOnly: Boolean = true,
     /** JSON and long messages have their own default: big responses stay one compact row until expanded. */
     val expandJsonByDefault: Boolean = false,
+    /** When the project app starts, the log starts over with it. */
+    val clearOnAppLaunch: Boolean = false,
     val visibleColumns: Set<LogColumn> = LogColumn.entries.toSet(),
     val columnWidths: Map<LogColumn, Int> = LogColumn.entries.associateWith { it.defaultWidthDp },
 ) {
@@ -44,6 +46,7 @@ data class ViewOptionsUiModel(
         ViewToggle.COLORIZE_TAGS -> colorizeTags
         ViewToggle.COPY_MESSAGE_ONLY -> copyMessageOnly
         ViewToggle.EXPAND_JSON -> expandJsonByDefault
+        ViewToggle.CLEAR_ON_APP_LAUNCH -> clearOnAppLaunch
     }
 
     fun isExpandedByDefault(entry: LogEntry): Boolean =
@@ -82,5 +85,6 @@ data class ViewOptionsUiModel(
         ViewToggle.COLORIZE_TAGS -> copy(colorizeTags = isOn)
         ViewToggle.COPY_MESSAGE_ONLY -> copy(copyMessageOnly = isOn)
         ViewToggle.EXPAND_JSON -> copy(expandJsonByDefault = isOn)
+        ViewToggle.CLEAR_ON_APP_LAUNCH -> copy(clearOnAppLaunch = isOn)
     }
 }

@@ -37,6 +37,7 @@ import com.melihaksoy.betterlogcat.format.UrlShortener
 import com.melihaksoy.betterlogcat.model.LogColumn
 import com.melihaksoy.betterlogcat.model.LogEntry
 import com.melihaksoy.betterlogcat.model.LogLevel
+import com.melihaksoy.betterlogcat.network.NetworkCall
 import com.melihaksoy.betterlogcat.ui.logcat.model.SelectableCell
 import com.melihaksoy.betterlogcat.ui.logcat.model.ViewOptionsUiModel
 import com.melihaksoy.betterlogcat.ui.theme.BetterLogcatPreviewTheme
@@ -72,6 +73,9 @@ internal fun LogRow(
     urls: UrlShortener = UrlShortener.None,
     isFullyShown: Boolean = false,
     onShowAll: () -> Unit = {},
+    /** Folded JSON blocks of this message, by place (see [buildMessageText]). */
+    jsonFolds: Set<Int> = emptySet(),
+    onToggleJsonFold: (Int) -> Unit = {},
     /** First piece of a split big message; the list shows the other pieces as more items. Null builds the text here. */
     messageOverride: AnnotatedString? = null,
     isSelectedBelow: Boolean = false,
@@ -146,11 +150,14 @@ internal fun LogRow(
                 keywords = keywords,
                 urls = urls,
                 isFullyShown = isFullyShown,
+                call = gutter.call,
+                jsonFolds = jsonFolds,
                 colors = colors,
                 textStyle = textStyle,
                 textOverride = if (selectedCell == SelectableCell.MESSAGE) null else messageOverride,
                 onOpenFrame = onOpenFrame,
                 onShowAll = onShowAll,
+                onToggleJsonFold = onToggleJsonFold,
                 onCopyJson = onCopyJson,
                 onOpenInEditor = onOpenInEditor,
                 onToggleExpanded = onToggleExpanded,
@@ -188,11 +195,14 @@ internal fun LogRow(
                 keywords = keywords,
                 urls = urls,
                 isFullyShown = isFullyShown,
+                call = gutter.call,
+                jsonFolds = jsonFolds,
                 colors = colors,
                 textStyle = textStyle,
                 textOverride = if (selectedCell == SelectableCell.MESSAGE) null else messageOverride,
                 onOpenFrame = onOpenFrame,
                 onShowAll = onShowAll,
+                onToggleJsonFold = onToggleJsonFold,
                 onCopyJson = onCopyJson,
                 onOpenInEditor = onOpenInEditor,
                 onToggleExpanded = onToggleExpanded,
@@ -420,16 +430,20 @@ private fun MessageCell(
     keywords: KeywordHighlighter,
     urls: UrlShortener,
     isFullyShown: Boolean,
+    call: NetworkCall?,
+    jsonFolds: Set<Int>,
     colors: LogColors,
     textStyle: TextStyle,
     textOverride: AnnotatedString?,
     onOpenFrame: (StackFrame) -> Unit,
     onShowAll: () -> Unit,
+    onToggleJsonFold: (Int) -> Unit,
     onCopyJson: () -> Unit,
     onOpenInEditor: () -> Unit,
     onToggleExpanded: () -> Unit,
 ) {
     val currentOnShowAll by rememberUpdatedState(newValue = onShowAll)
+    val currentOnToggleJsonFold by rememberUpdatedState(newValue = onToggleJsonFold)
     val currentOnCopyJson by rememberUpdatedState(newValue = onCopyJson)
     val currentOnOpenInEditor by rememberUpdatedState(newValue = onOpenInEditor)
     val currentOnOpenFrame by rememberUpdatedState(newValue = onOpenFrame)
@@ -439,7 +453,9 @@ private fun MessageCell(
     )
     // Selecting text shows full addresses, so a copied part has the real URL.
     val shownUrls = if (isTextSelecting) UrlShortener.None else urls
-    val text = textOverride ?: remember(entry, isExpanded, isFullyShown, prettyJson, highlighter, keywords, shownUrls, colors, textColor) {
+    // Only a collapsed response row shows the call (its duration), so other rows ignore call updates.
+    val shownCall = call.takeIf { !isExpanded && it?.responseEntryId == entry.id }
+    val text = textOverride ?: remember(entry, isExpanded, isFullyShown, prettyJson, highlighter, keywords, shownUrls, colors, textColor, shownCall, jsonFolds) {
         buildMessageText(
             entry = entry,
             isExpanded = isExpanded,
@@ -450,10 +466,13 @@ private fun MessageCell(
             highlighter = highlighter,
             keywords = keywords,
             urls = shownUrls,
+            call = shownCall,
+            jsonFolds = jsonFolds,
             labels = messageLabels(),
             onOpenFrame = { currentOnOpenFrame(it) },
             onOpenUrl = { BrowserUtil.browse(it) },
             onShowAll = { currentOnShowAll() },
+            onToggleJsonFold = { currentOnToggleJsonFold(it) },
         )
     }
     Column(modifier = modifier) {
@@ -511,6 +530,8 @@ private fun defaultMessageColor(
 
 internal fun messageLabels(): MessageLabels = MessageLabels(
     showAll = { lines, size -> BetterLogcatBundle.message("row.showAll", lines, size) },
+    duration = { millis -> BetterLogcatBundle.message("network.duration", millis) },
+    folded = { count, isArray -> BetterLogcatBundle.message(if (isArray) "row.foldedItems" else "row.foldedKeys", count) },
 )
 
 /**

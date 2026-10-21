@@ -11,4 +11,5 @@ enum class ViewToggle {
     COLORIZE_TAGS,
     COPY_MESSAGE_ONLY,
     EXPAND_JSON,
+    CLEAR_ON_APP_LAUNCH,
 }

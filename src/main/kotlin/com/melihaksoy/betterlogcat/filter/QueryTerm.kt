@@ -13,11 +13,17 @@ enum class QueryKey(val token: String) {
     LINE(token = "line"),
     MESSAGE(token = "message"),
 
+    /** The method of an HTTP request or response line: `method:POST`. */
+    METHOD(token = "method"),
+
     /** Names a saved filter. Does not filter. */
     NAME(token = "name"),
     PACKAGE(token = "package"),
     PID(token = "pid"),
     PROCESS(token = "process"),
+
+    /** The status code of an HTTP response line: `status:404`, or a class with `x`: `status:4xx`. */
+    STATUS(token = "status"),
     TAG(token = "tag"),
     ;
 

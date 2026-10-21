@@ -143,6 +143,7 @@ soft-wrap, level colors, keyword highlights, package aliases and hidden base URL
 - Pair a device over Wi-Fi from the device picker.
 - Screenshot and screen recording (MP4 on devices, WebM on emulators).
 - Option to clear the log when your app starts.
+- The log of each device comes back after an IDE restart, with live lines after it.
 
 More screenshots and a full walkthrough: [User guide](docs/user-guide.md). The screenshots are rendered
 from the plugin's own UI code (see [CONTRIBUTING.md](CONTRIBUTING.md)).
