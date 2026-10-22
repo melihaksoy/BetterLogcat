@@ -59,9 +59,9 @@ class TagSelectionTest {
     fun `a drag moves the selection in row order, or the tag alone when it is not selected`() {
         val selection = TagSelectionUiModel().click(tag = "adbd").click(tag = "Adjust", isToggle = true)
 
-        assertEquals(listOf("Adjust", "adbd"), selection.dragged(tag = "adbd", rows = rows))
-        assertEquals(listOf("art"), selection.dragged(tag = "art", rows = rows))
+        assertEquals(listOf("Adjust", "adbd"), selection.tagsFor(tag = "adbd", rows = rows))
+        assertEquals(listOf("art"), selection.tagsFor(tag = "art", rows = rows))
         // A selected tag in a folded group is not on screen, so it does not move.
-        assertEquals(listOf("Adjust"), selection.dragged(tag = "Adjust", rows = rows - "adbd"))
+        assertEquals(listOf("Adjust"), selection.tagsFor(tag = "Adjust", rows = rows - "adbd"))
     }
 }

@@ -332,10 +332,6 @@ class LogcatViewModel(
                 tag = intent.tag,
                 note = intent.note,
             )
-            is LogcatIntent.AddTagToGroup -> tagNotesStore.addToGroup(
-                tag = intent.tag,
-                groupName = intent.groupName,
-            )
             is LogcatIntent.GroupTags -> tagNotesStore.groupTags(
                 tags = intent.tags,
                 groupName = intent.groupName,

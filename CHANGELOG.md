@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.1
+- Fixed: in the Tags panel, "Move to group", "New group…" and "Remove from group" on a selection of tags
+  moved only the tag you right-clicked. They now act on every selected tag, and the menu offers "Show only
+  these N tags" and "Hide these N tags". A right-click on a tag outside the selection selects that tag.
+
 ## 0.13.0
 - Collapsed HTTP rows show the method next to the address (`REQUEST: GET /path`), and a Ktor response
   shows how long the call took. Status codes are colored by class: 2xx, 3xx, 4xx, 5xx.

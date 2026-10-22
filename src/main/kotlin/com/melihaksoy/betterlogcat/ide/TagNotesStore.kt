@@ -37,17 +37,6 @@ class TagNotesStore {
         _notes.value = updated.toMap()
     }
 
-    fun addToGroup(
-        tag: String,
-        groupName: String,
-    ) = saveGroups(
-        groups = TagGroups.withTag(
-            groups = _groups.value,
-            tag = tag,
-            groupName = groupName,
-        ),
-    )
-
     fun groupTags(
         tags: List<String>,
         groupName: String,

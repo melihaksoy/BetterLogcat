@@ -44,10 +44,11 @@ data class TagSelectionUiModel(
     }
 
     /**
-     * The tags a drag from [tag] moves, in row order: every selected row when [tag] is selected,
-     * else [tag] alone. Selected tags in a folded group are not on screen, so they stay.
+     * The tags a drag from [tag] moves, or a right-click on [tag] acts on, in row order: every selected
+     * row when [tag] is selected, else [tag] alone. Selected tags in a folded group are not on screen,
+     * so they stay.
      */
-    fun dragged(
+    fun tagsFor(
         tag: String,
         rows: List<String>,
     ): List<String> = if (tag in tags) rows.filter { it in tags } else listOf(tag)

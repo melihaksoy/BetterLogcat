@@ -223,37 +223,46 @@ class IdeLogcatPopups(
     }
 
     override fun showTagMenu(
-        tag: String,
+        tags: List<String>,
         at: Point,
     ) {
+        val tag = tags.singleOrNull()
         val current = state()
         val group = DefaultActionGroup()
-        group.add(action(text = BetterLogcatBundle.message("tags.menu.editNote")) { editTagNote(tag = tag) })
-        if (!current.tagNotes[tag].isNullOrBlank()) {
-            group.add(
-                action(text = BetterLogcatBundle.message("tags.menu.resetNote")) {
-                    onIntent(
-                        LogcatIntent.SetTagNote(
-                            tag = tag,
-                            note = "",
-                        ),
-                    )
-                },
-            )
+        // A description belongs to one tag, so it is not offered for a selection of many.
+        if (tag != null) {
+            group.add(action(text = BetterLogcatBundle.message("tags.menu.editNote")) { editTagNote(tag = tag) })
+            if (!current.tagNotes[tag].isNullOrBlank()) {
+                group.add(
+                    action(text = BetterLogcatBundle.message("tags.menu.resetNote")) {
+                        onIntent(
+                            LogcatIntent.SetTagNote(
+                                tag = tag,
+                                note = "",
+                            ),
+                        )
+                    },
+                )
+            }
+            group.addSeparator()
         }
-        group.addSeparator()
-        val currentGroup = TagGroups.groupOf(
-            groups = current.tagGroups,
-            tag = tag,
-        )
+        val currentGroups = tags.mapNotNull {
+            TagGroups.groupOf(
+                groups = current.tagGroups,
+                tag = it,
+            )?.name
+        }.distinct()
+        // A group that has every tag already is no place to move them.
+        val sharedGroup = current.tagGroups.firstOrNull { it.tags.containsAll(tags) }?.name
         val moveTo = DefaultActionGroup(BetterLogcatBundle.message("tags.menu.addToGroup"), true)
-        val otherGroups = current.tagGroups.filter { it.name != currentGroup?.name }
+        val otherGroups = current.tagGroups.filter { it.name != sharedGroup }
         otherGroups.forEach { target ->
             moveTo.add(
                 action(text = target.name) {
                     onIntent(
-                        LogcatIntent.AddTagToGroup(
-                            tag = tag,
+                        LogcatIntent.GroupTags(
+                            // Tags already in the group keep their place in it.
+                            tags = tags.filter { it !in target.tags },
                             groupName = target.name,
                         ),
                     )
@@ -261,18 +270,34 @@ class IdeLogcatPopups(
             )
         }
         if (otherGroups.isNotEmpty()) moveTo.addSeparator()
-        moveTo.add(action(text = BetterLogcatBundle.message("tags.menu.newGroup")) { addToNewGroup(tag = tag) })
+        moveTo.add(action(text = BetterLogcatBundle.message("tags.menu.newGroup")) { addToNewGroup(tags = tags) })
         group.add(moveTo)
-        if (currentGroup != null) {
+        if (currentGroups.isNotEmpty()) {
+            val removeText = currentGroups.singleOrNull()?.let { BetterLogcatBundle.message("tags.menu.removeFromGroup", it) }
+                ?: BetterLogcatBundle.message("tags.menu.removeFromGroups")
             group.add(
-                action(text = BetterLogcatBundle.message("tags.menu.removeFromGroup", currentGroup.name)) {
-                    onIntent(LogcatIntent.UngroupTags(tags = listOf(tag)))
+                action(text = removeText) {
+                    onIntent(LogcatIntent.UngroupTags(tags = tags))
                 },
             )
         }
         group.addSeparator()
-        group.add(action(text = BetterLogcatBundle.message("menu.showOnlyTag", tag)) { onIntent(LogcatIntent.ShowOnlyTag(tag = tag)) })
-        group.add(action(text = BetterLogcatBundle.message("menu.hideTag", tag)) { onIntent(LogcatIntent.HideTag(tag = tag)) })
+        if (tag != null) {
+            group.add(action(text = BetterLogcatBundle.message("menu.showOnlyTag", tag)) { onIntent(LogcatIntent.ShowOnlyTag(tag = tag)) })
+            group.add(action(text = BetterLogcatBundle.message("menu.hideTag", tag)) { onIntent(LogcatIntent.HideTag(tag = tag)) })
+        } else {
+            group.add(action(text = BetterLogcatBundle.message("tags.menu.showOnlyTags", tags.size)) { onIntent(LogcatIntent.ShowOnlyTags(tags = tags)) })
+            group.add(
+                action(text = BetterLogcatBundle.message("tags.menu.hideTags", tags.size)) {
+                    onIntent(
+                        LogcatIntent.SetTagsVisible(
+                            tags = tags,
+                            isVisible = false,
+                        ),
+                    )
+                },
+            )
+        }
         showMenu(
             at = at,
             group = group,
@@ -326,13 +351,13 @@ class IdeLogcatPopups(
         )
     }
 
-    private fun addToNewGroup(tag: String) {
+    private fun addToNewGroup(tags: List<String>) {
         val name = askGroupName(
             initial = TagGroups.nextName(groups = state().tagGroups) { BetterLogcatBundle.message("tags.group.defaultName", it) },
         ) ?: return
         onIntent(
-            LogcatIntent.AddTagToGroup(
-                tag = tag,
+            LogcatIntent.GroupTags(
+                tags = tags,
                 groupName = name,
             ),
         )

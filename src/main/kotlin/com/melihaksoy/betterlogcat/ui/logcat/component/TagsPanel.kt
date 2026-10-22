@@ -108,7 +108,8 @@ internal fun TagsPanel(
     colors: LogColors,
     tagNotes: Map<String, String> = emptyMap(),
     tagGroups: List<TagGroup> = emptyList(),
-    onTagMenu: (String, Point) -> Unit = { _, _ -> },
+    /** Right-click on a tag: the tags the menu acts on (the selection, or the clicked tag alone), and where. */
+    onTagMenu: (List<String>, Point) -> Unit = { _, _ -> },
     onGroupMenu: (String, Point) -> Unit = { _, _ -> },
     onIntent: (LogcatIntent) -> Unit,
 ) {
@@ -190,6 +191,22 @@ internal fun TagsPanel(
             rows = rows,
             isToggle = if (SystemInfo.isMac) keys.isMetaPressed else keys.isCtrlPressed,
             isRange = keys.isShiftPressed,
+        )
+    }
+    // A right-click on a selected tag acts on the whole selection; on another tag, it selects that tag first.
+    val onRowMenu = { tag: String, point: Point ->
+        if (tag !in selection.tags) {
+            selection = TagSelectionUiModel(
+                tags = setOf(tag),
+                anchor = tag,
+            )
+        }
+        onTagMenu(
+            selection.tagsFor(
+                tag = tag,
+                rows = rows,
+            ),
+            point,
         )
     }
     val dropKey = dragged?.let { drag ->
@@ -331,7 +348,7 @@ internal fun TagsPanel(
                                 // Past the slop the drag owns the gesture; the consumed move cancels the row click.
                                 val start = awaitTouchSlopOrCancellation(pointerId = down.id) { change, _ -> change.consume() }
                                     ?: return@awaitEachGesture
-                                val tags = selection.dragged(
+                                val tags = selection.tagsFor(
                                     tag = tag,
                                     rows = currentRows,
                                 )
@@ -437,7 +454,7 @@ internal fun TagsPanel(
                                             )
                                         },
                                         onShowOnly = { onIntent(LogcatIntent.ShowOnlyTag(tag = node.name)) },
-                                        onMenu = { point -> onTagMenu(node.name, point) },
+                                        onMenu = { point -> onRowMenu(node.name, point) },
                                     )
                                 }
                                 is TagNodeUiModel.Group -> {
@@ -500,7 +517,7 @@ internal fun TagsPanel(
                                                     )
                                                 },
                                                 onShowOnly = { onIntent(LogcatIntent.ShowOnlyTag(tag = child.name)) },
-                                                onMenu = { point -> onTagMenu(child.name, point) },
+                                                onMenu = { point -> onRowMenu(child.name, point) },
                                             )
                                         }
                                     }

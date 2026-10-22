@@ -30,9 +30,9 @@ interface LogcatPopups {
     fun takeScreenshot()
     fun recordScreen()
 
-    /** Right-click on a tag in the Tags panel: description and group actions. */
+    /** Right-click on a tag in the Tags panel: description and group actions for [tags], the selected tags or the clicked one. */
     fun showTagMenu(
-        tag: String,
+        tags: List<String>,
         at: Point,
     )
 
@@ -98,7 +98,7 @@ interface LogcatPopups {
         override fun takeScreenshot() = Unit
         override fun recordScreen() = Unit
         override fun showTagMenu(
-            tag: String,
+            tags: List<String>,
             at: Point,
         ) = Unit
         override fun showTagGroupMenu(

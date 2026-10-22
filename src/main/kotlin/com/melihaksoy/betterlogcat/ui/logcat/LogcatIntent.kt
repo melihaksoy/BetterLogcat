@@ -86,11 +86,7 @@ sealed interface LogcatIntent {
         val tag: String,
         val note: String,
     ) : LogcatIntent
-    data class AddTagToGroup(
-        val tag: String,
-        val groupName: String,
-    ) : LogcatIntent
-    /** Tags dragged together in the Tags panel: all go in the group [groupName], new or not. */
+    /** Tags dragged together, or moved from the tag menu, in the Tags panel: all go in the group [groupName], new or not. */
     data class GroupTags(
         val tags: List<String>,
         val groupName: String,
