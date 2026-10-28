@@ -8,6 +8,7 @@ import com.melihaksoy.betterlogcat.domain.usecase.LogcatRequest
 import com.melihaksoy.betterlogcat.domain.usecase.ObserveDevicesInteractor
 import com.melihaksoy.betterlogcat.domain.usecase.ObserveProcessesInteractor
 import com.melihaksoy.betterlogcat.domain.usecase.ObserveProjectAppIdsInteractor
+import com.melihaksoy.betterlogcat.domain.usecase.ProjectApps
 import com.melihaksoy.betterlogcat.domain.usecase.ProcessSnapshot
 import com.melihaksoy.betterlogcat.domain.usecase.StreamLogcatInteractor
 import com.melihaksoy.betterlogcat.ide.AppearanceStore
@@ -74,7 +75,14 @@ class LogcatViewModelTest : BasePlatformTestCase() {
                 override fun invoke(): EitherFlow<List<Device>> = flowOf(Either.Right(value = listOf(DEVICE)))
             },
             observeProjectAppIds = object : ObserveProjectAppIdsInteractor {
-                override fun invoke(): EitherFlow<Set<String>> = flowOf(Either.Right(value = setOf(APP)))
+                override fun invoke(): EitherFlow<ProjectApps> = flowOf(
+                    Either.Right(
+                        value = ProjectApps(
+                            ids = setOf(APP),
+                            launched = APP,
+                        ),
+                    ),
+                )
             },
             streamLogcat = object : StreamLogcatInteractor {
                 override fun invoke(request: LogcatRequest): EitherFlow<List<LogEntry>> {
@@ -133,6 +141,24 @@ class LogcatViewModelTest : BasePlatformTestCase() {
         viewModel.onIntent(LogcatIntent.ChangeQuery(query = "tag:OkHttp "))
 
         assertEquals(listOf("OkHttp"), await { it.entries.size == 1 }.entries.map { it.tag })
+    }
+
+    fun `test pinning the project app keeps the other terms and the last filter`() {
+        viewModel.onIntent(LogcatIntent.ChangeQuery(query = "package:mine -tag:Chatty "))
+        val lastFilter = BetterLogcatSettings.getInstance().state.lastFilter
+
+        viewModel.onIntent(LogcatIntent.PinProjectApp(appId = "com.example.old"))
+
+        assertEquals("package:com.example.old -tag:Chatty", viewModel.state.value.filter.toQueryString())
+        assertEquals(lastFilter, BetterLogcatSettings.getInstance().state.lastFilter)
+    }
+
+    fun `test pinning does nothing without package mine`() {
+        viewModel.onIntent(LogcatIntent.ChangeQuery(query = "package:com.example.other "))
+
+        viewModel.onIntent(LogcatIntent.PinProjectApp(appId = "com.example.old"))
+
+        assertEquals("package:com.example.other", viewModel.state.value.filter.toQueryString())
     }
 
     fun `test pause holds new entries until resume`() {

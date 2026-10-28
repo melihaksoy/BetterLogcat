@@ -9,6 +9,7 @@ fun LogcatState.tabTitle(): String {
     val packageLabel = PackageLabels.label(
         filter = filter.packageFilter,
         projectAppIds = projectAppIds,
+        currentAppId = currentAppId,
         runningPackages = packages,
         aliases = packageAliases,
     )

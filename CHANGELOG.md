@@ -4,6 +4,15 @@
 - Fixed: in the Tags panel, "Move to group", "New group…" and "Remove from group" on a selection of tags
   moved only the tag you right-clicked. They now act on every selected tag, and the menu offers "Show only
   these N tags" and "Hide these N tags". A right-click on a tag outside the selection selects that tag.
+- Fixed: after a switch to another build variant, the package picker and the tab title still named the
+  old app while it ran (`com.example.alpha +1`). They now name the app you launched last.
+- Settings › Tools › Better Logcat lists the hidden base URLs. Add, edit and remove them there.
+- Start a different project app, for example after a build variant switch, and the `package:mine` tab
+  changes to the package of the old app. A new tab opens with the same filter for the new app, so each
+  app keeps its own log and tags. A tab that shows the new app already gets the focus. On by default;
+  turn it off in Settings › Tools › Better Logcat.
+- Network panel: with an address filter, the title counts the matching calls (`Network (7 of 120)`), for
+  example how often one endpoint ran.
 
 ## 0.13.0
 - Collapsed HTTP rows show the method next to the address (`REQUEST: GET /path`), and a Ktor response

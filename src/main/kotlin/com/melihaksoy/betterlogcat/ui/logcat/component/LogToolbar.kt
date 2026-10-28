@@ -79,6 +79,7 @@ internal fun LogToolbar(
                 label = PackageLabels.label(
                     filter = state.filter.packageFilter,
                     projectAppIds = state.projectAppIds,
+                    currentAppId = state.currentAppId,
                     runningPackages = state.packages,
                     aliases = state.packageAliases,
                 ),

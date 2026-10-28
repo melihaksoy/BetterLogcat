@@ -109,6 +109,16 @@ class AppearanceStore {
         saveHiddenUrlBases(bases = _hiddenUrlBases.value - base)
     }
 
+    /** Replaces the whole list, for the settings page. Blank and repeated bases drop out. */
+    fun setHiddenUrlBases(bases: List<String>) {
+        saveHiddenUrlBases(
+            bases = bases
+                .map { it.trim().trimEnd('/') }
+                .filter { it.isNotEmpty() }
+                .distinctBy { it.lowercase() },
+        )
+    }
+
     private fun saveHiddenUrlBases(bases: List<String>) {
         // Replaced, not changed in place, so the settings store sees the change.
         settings.state.hiddenUrlBases = bases.toMutableList()

@@ -14,6 +14,7 @@ import com.intellij.openapi.project.Project
 import com.melihaksoy.betterlogcat.core.Either
 import com.melihaksoy.betterlogcat.core.EitherFlow
 import com.melihaksoy.betterlogcat.domain.usecase.ObserveProjectAppIdsInteractor
+import com.melihaksoy.betterlogcat.domain.usecase.ProjectApps
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow
@@ -34,6 +35,8 @@ import kotlin.time.Duration.Companion.seconds
  *
  * The project system leaves out a variant whose id Gradle sets at build time, so the ids of the selected
  * run configuration and of every app launched in this session count too. A launch reloads at once.
+ *
+ * After a variant switch the old app can still run, so the last launch names the current app.
  */
 class ObserveProjectAppIdsInteractorImpl(
     private val project: Project,
@@ -41,12 +44,15 @@ class ObserveProjectAppIdsInteractorImpl(
 ) : ObserveProjectAppIdsInteractor {
 
     private val launchedIds = ConcurrentHashMap.newKeySet<String>()
+
+    @Volatile
+    private var lastLaunchedId: String? = null
     private val reloads = MutableSharedFlow<Unit>(
         extraBufferCapacity = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
 
-    private val shared = flow<Either<Throwable, Set<String>>> {
+    private val shared = flow<Either<Throwable, ProjectApps>> {
         while (true) {
             emit(load())
             withTimeoutOrNull(timeout = POLL_INTERVAL) { reloads.first() }
@@ -75,7 +81,7 @@ class ObserveProjectAppIdsInteractorImpl(
         )
     }
 
-    override fun invoke(): EitherFlow<Set<String>> = shared
+    override fun invoke(): EitherFlow<ProjectApps> = shared
 
     private suspend fun onLaunched(configuration: RunConfiguration) {
         val id = try {
@@ -92,23 +98,29 @@ class ObserveProjectAppIdsInteractorImpl(
         } catch (_: LinkageError) {
             null
         } ?: return
-        if (launchedIds.add(id)) reloads.tryEmit(Unit)
+        val isNew = launchedIds.add(id)
+        val isSwitch = lastLaunchedId != id
+        lastLaunchedId = id
+        if (isNew || isSwitch) reloads.tryEmit(Unit)
     }
 
-    private suspend fun load(): Either<Throwable, Set<String>> = try {
-        val ids = readAction {
+    private suspend fun load(): Either<Throwable, ProjectApps> = try {
+        val apps = readAction {
             val system = project.getProjectSystem()
-            val selected = RunManager.getInstance(project).selectedConfiguration?.configuration
-            system.getKnownApplicationIds() + launchedIds + listOfNotNull(
-                selected?.let {
-                    packageName(
-                        system = system,
-                        configuration = it,
-                    )
-                },
+            val selectedId = RunManager.getInstance(project).selectedConfiguration?.configuration?.let {
+                packageName(
+                    system = system,
+                    configuration = it,
+                )
+            }
+            val ids = system.getKnownApplicationIds() + launchedIds + listOfNotNull(selectedId)
+            ProjectApps(
+                ids = ids.sorted().toSet(),
+                launched = lastLaunchedId,
+                selected = selectedId,
             )
         }
-        Either.Right(value = ids.sorted().toSet())
+        Either.Right(value = apps)
     } catch (exception: CancellationException) {
         throw exception
     } catch (exception: Exception) {

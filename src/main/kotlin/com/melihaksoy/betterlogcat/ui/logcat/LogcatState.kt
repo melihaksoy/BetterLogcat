@@ -35,6 +35,8 @@ data class LogcatState(
     val processNames: Map<Int, String> = emptyMap(),
     val packages: List<String> = emptyList(),
     val projectAppIds: Set<String> = emptySet(),
+    /** The project app launched last, else the one the selected run configuration deploys. */
+    val currentAppId: String? = null,
     /** Package name to short display name. Visual only. */
     val packageAliases: Map<String, String> = emptyMap(),
     /** User colors that replace the theme color of a level. */

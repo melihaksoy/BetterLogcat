@@ -22,5 +22,8 @@ class TabLayoutStore : SimplePersistentStateComponent<TabLayoutStore.TabsState>(
 
         /** False until the first save, so a first run starts with one default tab. */
         var isSaved by property(defaultValue = false)
+
+        /** The project app started last, so the first start after a restart can still count as a switch. */
+        var lastLaunchedApp by string(defaultValue = null)
     }
 }

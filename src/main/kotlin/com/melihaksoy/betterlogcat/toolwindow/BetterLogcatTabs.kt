@@ -12,11 +12,13 @@ import com.intellij.ui.content.ContentFactory
 import com.intellij.ui.content.ContentManagerEvent
 import com.intellij.ui.content.ContentManagerListener
 import com.melihaksoy.betterlogcat.BetterLogcatBundle
+import com.melihaksoy.betterlogcat.core.Either
 import com.melihaksoy.betterlogcat.ide.BetterLogcatProjectService
 import kotlinx.coroutines.delay
 import com.melihaksoy.betterlogcat.ide.TabLayoutStore
 import com.melihaksoy.betterlogcat.filter.QueryTerm
 import com.melihaksoy.betterlogcat.settings.BetterLogcatSettings
+import com.melihaksoy.betterlogcat.ui.logcat.LogcatIntent
 import com.melihaksoy.betterlogcat.ui.logcat.tabTitle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +28,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -74,6 +77,64 @@ class BetterLogcatTabs(
                 withContext(context = Dispatchers.EDT) { saveTabs() }
             }
         }
+        watchAppSwitches()
+    }
+
+    /** A start of another project app than the last one, for example after a variant switch. See [AppSwitch]. */
+    private fun watchAppSwitches() {
+        service.scope.launch {
+            var previous: String? = layoutStore.state.lastLaunchedApp
+            service.observeProjectAppIds()
+                .mapNotNull { (it as? Either.Right)?.value?.launched }
+                .distinctUntilChanged()
+                .collect { launched ->
+                    val from = previous
+                    previous = launched
+                    layoutStore.state.lastLaunchedApp = launched
+                    if (from == null || from == launched || !BetterLogcatSettings.getInstance().state.openTabOnAppSwitch) return@collect
+                    withContext(context = Dispatchers.EDT) {
+                        onAppSwitch(
+                            from = from,
+                            to = launched,
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun onAppSwitch(
+        from: String,
+        to: String,
+    ) {
+        if (project.isDisposed || toolWindow.isDisposed) return
+        val contents = toolWindow.contentManager.contents.toList()
+        val panes = contents.flatMapIndexed { index, content ->
+            trees[content]?.openPanes.orEmpty().map { pane -> index to pane }
+        }
+        val action = AppSwitch.plan(
+            panes = panes.map { (index, pane) ->
+                val state = pane.viewModel.state.value
+                AppSwitch.PaneInfo(
+                    tabIndex = index,
+                    serial = state.selectedSerial,
+                    filter = state.filter,
+                )
+            },
+            selectedTab = contents.indexOf(toolWindow.contentManager.selectedContent),
+            newAppId = to,
+        )
+        panes.forEach { (_, pane) -> pane.viewModel.onIntent(intent = LogcatIntent.PinProjectApp(appId = from)) }
+        when (action) {
+            is AppSwitch.Action.Focus -> toolWindow.contentManager.setSelectedContent(contents[action.tabIndex])
+            is AppSwitch.Action.Open -> addTab(
+                layout = PaneNode.Leaf(
+                    serial = action.serial,
+                    query = action.query,
+                ),
+            )
+            AppSwitch.Action.None -> Unit
+        }
+        saveTabs()
     }
 
     /** Adds a tab. Without a [layout] it starts on the device of the selected tab, with the last filter. */

@@ -27,6 +27,12 @@ From left to right:
   collapse the selection.
 - JSON is colored. Expanded, it is pretty printed. Collapsed, the row shows **Copy JSON** and **Open**
   (a read-only editor tab with folding and find).
+- In expanded JSON, click the line that opens a block (`▾`) to fold it to `▸ { … 12 keys }`. Deep in a big
+  body, a path bar at the top shows the blocks around you; click one to fold it.
+- An HTTP row shows the method next to the address, a Ktor response shows the call time, and the status
+  code is colored by class (2xx, 3xx, 4xx, 5xx).
+- After an IDE restart, each device's last log shows again, up to a "previous IDE session" divider. Live
+  lines continue below it.
 - Stack frames and links are clickable. Load an R8/ProGuard `mapping.txt` (row menu › Retrace, or View
   settings) to retrace obfuscated traces.
 - App start and end lines from ActivityManager show as markers between runs.
@@ -123,6 +129,12 @@ The **Export** button opens a menu:
 Each tab and split pane has its own device and filter. Split right or down from the toolbar; close a pane with
 its close button. Tabs and splits are remembered per project.
 
+Start a different project app from the IDE, for example after a build variant switch, and the old app can keep
+running next to the new one. Tabs with `package:mine` then change to the package of the old app
+(`package:com.example.alpha.debug`), and a new tab opens with the same filter for the new app
+(`package:com.example.beta.debug`). Each tab keeps its own log and tag list. If a tab for the new app is open
+already, it gets the focus instead. Turn this off in Settings › Tools › Better Logcat.
+
 ## Settings
 
 **View settings** (gear button): columns, time format, colors, keyword highlights, presets (OkHttp, Ktor,
@@ -137,9 +149,11 @@ Retrofit …), package aliases, retrace, with a live preview. Changes apply at o
 | Show the existing device log when a device connects | on |
 | Clear also clears the log on the device | on |
 | Keep the last log of each device after an IDE restart | on |
+| Open a new tab when you start a different project app | on |
 | Keep bookmarks after Clear and IDE restart | on |
 | Notify me of a crash or ANR while the tool window is hidden | on |
 | Keep problem sessions for this many days | 30 |
+| Hidden base URLs (add, edit, remove) | none |
 
 ## Keyboard
 

@@ -9,6 +9,7 @@ import com.melihaksoy.betterlogcat.domain.usecase.LogcatRequest
 import com.melihaksoy.betterlogcat.domain.usecase.ObserveDevicesInteractor
 import com.melihaksoy.betterlogcat.domain.usecase.ObserveProcessesInteractor
 import com.melihaksoy.betterlogcat.domain.usecase.ObserveProjectAppIdsInteractor
+import com.melihaksoy.betterlogcat.domain.usecase.ProjectApps
 import com.melihaksoy.betterlogcat.domain.usecase.ProcessSnapshot
 import com.melihaksoy.betterlogcat.domain.usecase.StreamLogcatInteractor
 import com.melihaksoy.betterlogcat.filter.LevelVisibility
@@ -267,6 +268,7 @@ class LogcatViewModel(
         when (intent) {
             is LogcatIntent.SelectDevice -> selectDevice(serial = intent.serial)
             is LogcatIntent.ChangeQuery -> updateFilter { it.copy(terms = emptyList(), query = intent.query) }
+            is LogcatIntent.PinProjectApp -> pinProjectApp(appId = intent.appId)
             LogcatIntent.RefreshSavedFilters -> refreshSavedFilters()
             LogcatIntent.ResetViewAfterCrash -> updateViewOptions { it.copy(sidePanel = SidePanel.NONE) }
             is LogcatIntent.ResizeSidePanel -> updateViewOptions {
@@ -642,7 +644,9 @@ class LogcatViewModel(
         if (usesProcessNames) refilter() else rebuildMatcher()
     }
 
-    private fun onProjectAppIds(ids: Set<String>) {
+    private fun onProjectAppIds(apps: ProjectApps) {
+        if (apps.current != _state.value.currentAppId) _state.update { it.copy(currentAppId = apps.current) }
+        val ids = apps.ids
         if (ids == _state.value.projectAppIds) return
         _state.update { it.copy(projectAppIds = ids) }
         if (QueryTerm.Mine in _state.value.filter.effective().terms) refilter() else rebuildMatcher()
@@ -1052,11 +1056,20 @@ class LogcatViewModel(
 
     // region Filters
 
-    private fun updateFilter(transform: (LogFilter) -> LogFilter) {
+    /** [isLastFilter] false keeps the saved last filter, for changes the user did not make. */
+    private fun updateFilter(
+        isLastFilter: Boolean = true,
+        transform: (LogFilter) -> LogFilter,
+    ) {
         val filter = transform(_state.value.filter)
         _state.update { it.copy(filter = filter) }
         filterChanges.value = filter
-        settings.state.lastFilter = filter.toQueryString()
+        if (isLastFilter) settings.state.lastFilter = filter.toQueryString()
+    }
+
+    private fun pinProjectApp(appId: String) {
+        if (_state.value.filter.packageFilter != PackageFilter.ProjectApps) return
+        updateFilter(isLastFilter = false) { it.withPackageFilter(packageFilter = PackageFilter.Package(name = appId)) }
     }
 
     private fun refreshSavedFilters() {

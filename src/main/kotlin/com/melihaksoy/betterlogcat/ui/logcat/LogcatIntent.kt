@@ -20,6 +20,12 @@ sealed interface LogcatIntent {
     data class SelectDevice(val serial: String) : LogcatIntent
 
     data class ChangeQuery(val query: String) : LogcatIntent
+
+    /**
+     * Replaces `package:mine` with `package:[appId]`, after a start of another project app. The last filter
+     * stays, so new tabs still start from `package:mine`. Does nothing without `package:mine`.
+     */
+    data class PinProjectApp(val appId: String) : LogcatIntent
     data object RefreshSavedFilters : LogcatIntent
 
     data class ToggleBookmark(val id: Long) : LogcatIntent

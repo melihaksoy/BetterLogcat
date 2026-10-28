@@ -41,6 +41,10 @@ class LogcatPaneTree(
     val count: Int
         get() = panes.size
 
+    /** The open panes, oldest first. */
+    val openPanes: List<LogcatPane>
+        get() = panes.toList()
+
     init {
         component.add(build(node = layout), BorderLayout.CENTER)
     }

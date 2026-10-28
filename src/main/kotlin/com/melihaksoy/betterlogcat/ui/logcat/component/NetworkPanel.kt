@@ -83,7 +83,12 @@ internal fun NetworkPanel(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = BetterLogcatBundle.message("network.title", calls.size),
+                // With a filter, the count of matching calls, for example how often one endpoint ran.
+                text = if (query.isEmpty()) {
+                    BetterLogcatBundle.message("network.title", calls.size)
+                } else {
+                    BetterLogcatBundle.message("network.title.filtered", rows.size, calls.size)
+                },
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(modifier = Modifier.weight(1f))

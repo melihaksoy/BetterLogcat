@@ -15,8 +15,10 @@
     </ul>
     <h3>Reading and filtering</h3>
     <ul>
-      <li>Stack traces and chunked bodies (Ktor, OkHttp) stay one entry. JSON is detected, colored and pretty printed.</li>
-      <li>Studio-style search terms with autocomplete: package:mine, tag:, -tag:, level:, is:crash, age:, context:N.</li>
+      <li>Stack traces and chunked bodies (Ktor, OkHttp) stay one entry. JSON is detected, colored, pretty printed and foldable.</li>
+      <li>HTTP rows show the method, the call time and a colored status code.</li>
+      <li>Studio-style search terms with autocomplete: package:mine, tag:, -tag:, level:, is:crash, age:, method:, status:, context:N.</li>
+      <li>Each device's last log shows again after an IDE restart, and live lines continue below it.</li>
       <li>Favorites and history with match counts. Find bar that does not change the filter.</li>
       <li>Tags panel as a tree: show or hide with checkboxes, drag tags together into groups, tag descriptions.</li>
       <li>Keyword highlights and presets for OkHttp, Ktor and Retrofit. Clickable stack frames. R8 retrace.</li>

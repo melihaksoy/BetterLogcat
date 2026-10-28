@@ -16,9 +16,11 @@ multi-line messages, long JSON, copying, noisy tags, and crashes that scroll awa
   per session. Problems survive Clear and IDE restarts until you delete them, so a crash you cleared by
   accident is still there. Frame drop chart from Choreographer.
 - **Messages stay whole.** Stack traces and chunked bodies (Ktor, OkHttp over ~4000 chars) are one entry.
-  JSON is detected, colored and pretty printed.
+  JSON is detected, colored, pretty printed and foldable.
 - **Studio-style search terms** with autocomplete: `package:mine`, `tag:`, `-tag:`, `level:W`, `is:crash`,
-  `age:5m`, `context:3` and more. See the [search term reference](docs/search-terms.md).
+  `age:5m`, `status:4xx`, `context:3` and more. See the [search term reference](docs/search-terms.md).
+- **The log survives a restart.** After an IDE restart, each device's last log shows again and live lines
+  continue below it.
 - **Tags panel as a tree.** Show or hide tags with checkboxes, drag tags onto each other to make groups.
 - **Network panel** for Ktor and OkHttp: requests paired with responses, copy the path, URL or cURL.
 - **Tabs and split panes**, each with its own device and filter, remembered per project.
@@ -36,8 +38,9 @@ launch starts a new session; earlier sessions stay below, also after Clear and I
 ### Big responses, readable
 
 Chunked Ktor and OkHttp bodies join into one entry. JSON is colored, pretty printed when expanded, and one
-compact line with **Copy JSON** and **Open** when collapsed. A huge body scrolls smoothly; a sticky header
-keeps its actions in reach.
+compact line with **Copy JSON** and **Open** when collapsed. Click the line that opens a block to fold it.
+A huge body scrolls smoothly; a sticky header keeps its actions in reach, and a path bar
+(`{ } › results › [3]`) shows where you are and folds a block with one click.
 
 ![An expanded Ktor response](docs/images/ktor.png)
 
@@ -50,7 +53,9 @@ then show `/pokemon/1/`; a click still opens the full address.
 
 ### Network calls
 
-The Network panel pairs each request with its response. The call list shows the path; right-click a call,
+The Network panel pairs each request with its response. In the log, a collapsed HTTP row shows the method,
+a Ktor response shows how long the call took, and status codes are colored by class. Filter calls with
+`method:POST`, `status:5xx` or `is:http`. The call list shows the path; right-click a call,
 or use the buttons under the address, to copy the path, the full URL, the request or response, or a cURL
 command.
 
@@ -108,7 +113,8 @@ soft-wrap, level colors, keyword highlights, package aliases and hidden base URL
 **Reading logs**
 - Multi-line and chunked messages stay one entry. Big messages are virtualized and stay smooth.
 - JSON anywhere in a message is colored; expanded rows pretty print it, collapsed rows offer **Copy JSON**
-  and **Open** (read-only editor tab).
+  and **Open** (read-only editor tab). Expanded JSON folds per block, with a path bar in deep bodies.
+- HTTP rows show the method, the call time (Ktor) and a status code colored by class.
 - Clickable stack frames and links, keyword highlights, per-level colors, R8/ProGuard retrace with a
   `mapping.txt`.
 - Hidden base URLs: links show without the base you set; a click opens the full address.
@@ -124,9 +130,11 @@ soft-wrap, level colors, keyword highlights, package aliases and hidden base URL
 - IDE notification when the app crashes or stops responding while the tool window is hidden.
 
 **Filtering and finding**
-- Search terms live in the search text, colored and editable, with autocomplete (Ctrl+Space).
+- Search terms live in the search text, colored and editable, with autocomplete (Ctrl+Space). Long term
+  lists show short until the cursor goes into them.
+- `package:mine` follows the app you run, also a build variant whose id Gradle sets at build time.
 - Favorites and history behind the funnel button, with match counts. The last filter is restored.
-- Level toggles and the Tags panel: your app vs. other, counts, per-second sparklines, groups. Under a
+- Level toggles (they write `level` terms into the search text) and the Tags panel: your app vs. other, counts, per-second sparklines, groups. Under a
   `package:` filter it lists only the tags those packages logged.
 - Find bar (Cmd/Ctrl+F) moves between matches without changing the filter.
 
@@ -142,8 +150,8 @@ soft-wrap, level colors, keyword highlights, package aliases and hidden base URL
 - Tabs and split panes, each with its own device and filter.
 - Pair a device over Wi-Fi from the device picker.
 - Screenshot and screen recording (MP4 on devices, WebM on emulators).
-- Option to clear the log when your app starts.
-- The log of each device comes back after an IDE restart, with live lines after it.
+- Toolbar toggle to clear the log when your app starts.
+- The log of each device comes back after an IDE restart, and after a switch to another device and back.
 
 More screenshots and a full walkthrough: [User guide](docs/user-guide.md). The screenshots are rendered
 from the plugin's own UI code (see [CONTRIBUTING.md](CONTRIBUTING.md)).

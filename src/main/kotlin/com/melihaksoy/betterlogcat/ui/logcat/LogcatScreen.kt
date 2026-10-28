@@ -401,6 +401,7 @@ private fun EmptyLogs(
             PackageLabels.label(
                 filter = packageFilter,
                 projectAppIds = state.projectAppIds,
+                currentAppId = state.currentAppId,
                 runningPackages = state.packages,
                 aliases = state.packageAliases,
             ),

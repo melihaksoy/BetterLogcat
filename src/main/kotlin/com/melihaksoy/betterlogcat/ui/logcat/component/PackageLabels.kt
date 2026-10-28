@@ -6,16 +6,20 @@ import com.melihaksoy.betterlogcat.filter.PackageFilter
 /** Text for the package picker, chooser rows and tab titles. Kept short: a project can have dozens of ids. */
 internal object PackageLabels {
 
-    /** For "Project apps" this names the running project app, when exactly that is known. */
+    /**
+     * For "Project apps" this names the running project app. With more than one running, [currentAppId] goes
+     * first, so the app launched last shows, not an old variant that still runs.
+     */
     fun label(
         filter: PackageFilter,
         projectAppIds: Set<String>,
+        currentAppId: String?,
         runningPackages: List<String>,
         aliases: Map<String, String>,
     ): String = when (filter) {
         PackageFilter.All -> BetterLogcatBundle.message("filter.package.all")
         PackageFilter.ProjectApps -> {
-            val running = runningPackages.filter { it in projectAppIds }
+            val running = runningPackages.filter { it in projectAppIds }.sortedByDescending { it == currentAppId }
             when {
                 projectAppIds.isEmpty() -> BetterLogcatBundle.message("filter.package.project.none")
                 running.size == 1 -> aliases[running.single()] ?: running.single()

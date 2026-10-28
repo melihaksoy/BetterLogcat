@@ -28,6 +28,12 @@ class BetterLogcatSettings : SimplePersistentStateComponent<BetterLogcatSettings
         /** When the project app starts, the log starts over with it. */
         var clearOnAppLaunch by property(defaultValue = false)
 
+        /**
+         * A start of another project app, for example after a variant switch, pins `package:mine` tabs to the app
+         * that ran before and opens a tab for the new app.
+         */
+        var openTabOnAppSwitch by property(defaultValue = true)
+
         /** Saves the end of each device's log, so it shows again after an IDE restart. */
         var keepLastLog by property(defaultValue = true)
 

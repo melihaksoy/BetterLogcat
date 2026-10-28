@@ -11,6 +11,7 @@ nothing over the network and has no analytics.
 | Bookmarks (the bookmarked lines' text, cut at 64 KB) | `.idea/workspace.xml` of the project | one project |
 | Problem sessions (each problem's newest line, cut at 16 KB) and ignored problems | `.idea/workspace.xml` of the project | one project |
 | Tabs and split panes | `.idea/workspace.xml` of the project | one project |
+| The last 10,000 log lines of each device (messages cut at 64 KB), to show again after a restart | `better-logcat/last-log/` in the IDE's system folder, one gzip file per device | all projects |
 
 `.idea/workspace.xml` is your personal project file; projects usually keep it out of version control. Check
 your `.gitignore` if you commit `.idea/`, because log lines can hold personal or secret data.
@@ -20,8 +21,10 @@ your `.gitignore` if you commit `.idea/`, because log lines can hold personal or
 - **Bookmarks:** remove them in the Bookmarks panel, or turn off "Keep bookmarks after Clear and IDE restart".
 - **Problems:** delete problems or sessions in the Problems panel, or use ⋮ › Delete All Earlier Sessions.
   Sessions older than the retention setting (default 30 days) are deleted when the project opens.
-- **Everything:** uninstall the plugin, delete `betterLogcat.xml` from the IDE config folder, and the
-  `BetterLogcat*` components from `.idea/workspace.xml`.
+- **Saved device logs:** Clear deletes the saved log of the device. Turning off "Keep the last log of each
+  device after an IDE restart" deletes all of them. The files are never in the project folder.
+- **Everything:** uninstall the plugin, delete `betterLogcat.xml` from the IDE config folder,
+  `better-logcat/` from the IDE system folder, and the `BetterLogcat*` components from `.idea/workspace.xml`.
 
 ## Commands it runs
 
