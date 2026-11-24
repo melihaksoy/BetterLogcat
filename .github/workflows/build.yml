@@ -40,3 +40,46 @@ jobs:
           name: better-logcat-zip
           path: build/distributions/*.zip
           if-no-files-found: error
+
+  # The build job verifies against the oldest supported Studio. This job verifies against the newest stable
+  # (Release or Patch) and the newest Canary, so an API change in a new Studio shows before users get it.
+  # The versions come from the same release list the IntelliJ Platform Gradle Plugin reads.
+  # A Canary problem marks its job as failed but does not fail the workflow: Canary APIs still move.
+  verify-newest:
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.channel == 'canary' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: [stable, canary]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Find the newest ${{ matrix.channel }} Android Studio
+        env:
+          CHANNEL: ${{ matrix.channel }}
+        run: |
+          if [ "$CHANNEL" = "canary" ]; then
+            filter='.channel == "Canary"'
+          else
+            filter='.channel == "Release" or .channel == "Patch"'
+          fi
+          version="$(curl -fsSL https://jb.gg/android-studio-releases-list.json \
+            | jq -r "[.content.item[] | select($filter)] | max_by(.version | split(\".\") | map(tonumber)) | .version")"
+          if [ -z "$version" ] || [ "$version" = "null" ]; then
+            echo "::error::No $CHANNEL Android Studio in the release list"
+            exit 1
+          fi
+          echo "Newest $CHANNEL Android Studio: $version"
+          echo "STUDIO_VERSION=$version" >> "$GITHUB_ENV"
+
+      # Compiles against the oldest Studio (platformVersion), then verifies the zip against the newest one.
+      - name: Verify against Android Studio ${{ env.STUDIO_VERSION }}
+        run: ./gradlew verifyPlugin -PverifyAndroidStudioVersions="$STUDIO_VERSION"
