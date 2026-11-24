@@ -32,7 +32,7 @@ object MediaFiles {
                 BetterLogcatBundle.message("media.saved", file.name),
                 NotificationType.INFORMATION,
             )
-            .addAction(NotificationAction.createSimple(BetterLogcatBundle.message("media.open")) { BrowserUtil.browse(file) })
+            .addAction(NotificationAction.createSimple(BetterLogcatBundle.message("media.open")) { BrowserUtil.browse(file.toPath()) })
             .addAction(NotificationAction.createSimple(RevealFileAction.getActionName()) { RevealFileAction.openFile(file) })
             .notify(project)
     }

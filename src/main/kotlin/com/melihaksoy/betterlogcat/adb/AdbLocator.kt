@@ -1,6 +1,5 @@
 package com.melihaksoy.betterlogcat.adb
 
-import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.SystemInfo
 import com.melihaksoy.betterlogcat.settings.BetterLogcatSettings
@@ -16,8 +15,14 @@ class AdbLocator(private val project: Project) {
         val configured = BetterLogcatSettings.getInstance().state.adbPath.orEmpty().trim()
         if (configured.isNotEmpty()) yield(File(configured))
         sdkRoots().forEach { yield(adbIn(sdk = it)) }
-        PathEnvironmentVariableUtil.findInPath(executableName())?.let { yield(it) }
+        yieldAll(pathEntries().map { File(it, executableName()) })
     }
+
+    /** Folders of the PATH environment variable, in order. Read directly: the platform helpers are deprecated in 263. */
+    private fun pathEntries(): List<String> = System.getenv("PATH")
+        .orEmpty()
+        .split(File.pathSeparatorChar)
+        .filter { it.isNotBlank() }
 
     /** Android SDK folders that may exist: project local.properties, env vars, then the default folder. */
     fun sdkRoots(): List<File> = buildList {

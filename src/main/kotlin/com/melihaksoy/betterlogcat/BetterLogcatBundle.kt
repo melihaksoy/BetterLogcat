@@ -8,7 +8,10 @@ import org.jetbrains.annotations.PropertyKey
 @NonNls
 private const val BUNDLE = "messages.BetterLogcatBundle"
 
-object BetterLogcatBundle : DynamicBundle(BUNDLE) {
+object BetterLogcatBundle : DynamicBundle(
+    BetterLogcatBundle::class.java,
+    BUNDLE,
+) {
 
     @Nls
     fun message(

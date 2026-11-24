@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.1
+- Ready for Android Studio 2026.3: the plugin declares its dependency on the Compose plugin, which
+  Studio 2026.3 ships apart from the platform.
+- No more deprecated or scheduled-for-removal platform API: opening an editor tab, opening a saved
+  screenshot or recording, the message bundle, and the adb lookup in PATH.
+
 ## 0.14.0
 - Network details: **Copy body** copies only the JSON body, pretty printed. No status line, headers,
   `BODY START` markers or fold arrows. Right-click a call in the Network panel for Copy Response Body.

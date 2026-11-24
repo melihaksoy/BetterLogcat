@@ -50,7 +50,7 @@ import com.intellij.testFramework.LightVirtualFile
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.fileTypes.PlainTextFileType
 import com.intellij.openapi.fileTypes.FileTypeManager
-import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.diff.requests.SimpleDiffRequest
 import com.intellij.diff.DiffManager
 import com.intellij.diff.DiffContentFactory
@@ -474,7 +474,10 @@ class IdeLogcatPopups(
         val name = "${entry.tag.replace(Regex(pattern = "[^A-Za-z0-9._-]+"), "_")}_$time.${if (isJson) "json" else "log"}"
         val file = LightVirtualFile(name, fileType, MessageDocument.text(entry = entry))
         file.isWritable = false
-        FileEditorManager.getInstance(project).openFile(file, true)
+        OpenFileDescriptor(
+            project,
+            file,
+        ).navigate(true)
     }
 
     private fun compare(
@@ -844,7 +847,10 @@ class IdeLogcatPopups(
     ) {
         val file = LightVirtualFile(name, PlainTextFileType.INSTANCE, text)
         file.isWritable = false
-        FileEditorManager.getInstance(project).openFile(file, true)
+        OpenFileDescriptor(
+            project,
+            file,
+        ).navigate(true)
     }
 
     private fun pairOverWifi() {

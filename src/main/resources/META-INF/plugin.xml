@@ -39,10 +39,14 @@
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
-    <!-- Android Studio only. Compose and Jewel come from Studio's core plugin; no com.intellij.modules.compose:
-         the Marketplace does not know that module in Android Studio and listed the plugin for IntelliJ IDEA only. -->
+    <!-- Android Studio only. -->
     <depends>com.intellij.modules.androidstudio</depends>
     <depends>org.jetbrains.android</depends>
+    <!-- Compose and Jewel: core modules in Studio 262, their own bundled plugin from 263. Without this, 263 cannot
+         resolve the Compose classes. An earlier release with this dependency was listed on the Marketplace for
+         IntelliJ IDEA only, because the Marketplace did not know the module in Android Studio. Check the listing
+         after each upload. -->
+    <depends>com.intellij.modules.compose</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow
