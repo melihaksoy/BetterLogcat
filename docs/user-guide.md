@@ -25,6 +25,9 @@ From left to right:
   OkHttp bodies) are joined back.
 - Click the chevron, or press Enter/Space, to expand or collapse a message. Right/Left arrows expand or
   collapse the selection.
+- View settings › Expanded by default sets the default per kind of message: errors and crashes (on),
+  HTTP requests and responses, JSON and long messages, and other multi-line messages. The first kind that
+  fits a message wins, in that order. The choice is kept across IDE restarts.
 - JSON is colored. Expanded, it is pretty printed. Collapsed, the row shows **Copy JSON** and **Open**
   (a read-only editor tab with folding and find).
 - In expanded JSON, click the line that opens a block (`▾`) to fold it to `▸ { … 12 keys }`. Deep in a big
@@ -91,7 +94,9 @@ The narrow column at the left of each row:
 ## Network panel
 
 Ktor and OkHttp requests paired with their responses: method, path, status and time. Click a call for the
-request and response details. Copy as cURL from the row or the gutter menu.
+request and response details. **Copy body** copies only the JSON body, pretty printed: no status line,
+headers, `BODY START` markers or fold arrows. Right-click a call for Copy Response Body, the path, the URL
+or cURL. Copy as cURL also works from the row or the gutter menu.
 
 ![Network panel](images/network-detail.png)
 

@@ -3,6 +3,7 @@ package com.melihaksoy.betterlogcat.model
 import androidx.compose.runtime.Immutable
 import com.melihaksoy.betterlogcat.format.JsonFormatter
 import com.melihaksoy.betterlogcat.format.StackFrameParser
+import com.melihaksoy.betterlogcat.network.HttpMessage
 
 /**
  * One logcat message. A multi-line message (stack trace, JSON) stays one entry.
@@ -46,6 +47,13 @@ class LogEntry(
             message = message,
         )
     }
+
+    /** The HTTP request or response this message logs, or null. See [HttpMessage.of]. */
+    val http: HttpMessage? by lazy(LazyThreadSafetyMode.PUBLICATION) { HttpMessage.of(message = message) }
+
+    /** Error or assert level. Errors have their own expand default. */
+    val isError: Boolean
+        get() = level.priority >= LogLevel.ERROR.priority
 
     /** Long enough to fill several rows. Long messages collapse like JSON. */
     val isLong: Boolean

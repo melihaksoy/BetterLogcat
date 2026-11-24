@@ -61,7 +61,7 @@ interface LogcatPopups {
     /** The export button: export, open a log file, compare with a log file. */
     fun showExportMenu(at: Point)
 
-    /** Right-click on a call in the Network panel: copy its path, URL or cURL. */
+    /** Right-click on a call in the Network panel: copy its response body, path, URL or cURL. */
     fun showNetworkCallMenu(
         call: NetworkCall,
         at: Point,

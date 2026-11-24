@@ -1219,10 +1219,7 @@ class LogcatViewModel(
     private fun setExpandByDefault(isExpanded: Boolean) {
         _state.update {
             it.copy(
-                viewOptions = it.viewOptions.copy(
-                    expandByDefault = isExpanded,
-                    expandJsonByDefault = isExpanded,
-                ),
+                viewOptions = it.viewOptions.withAllExpanded(isExpanded = isExpanded),
                 toggledIds = emptySet(),
             )
         }
@@ -1263,6 +1260,8 @@ class LogcatViewModel(
             colorizeTags = options.colorizeTags
             copyMessageOnly = options.copyMessageOnly
             expandJsonByDefault = options.expandJsonByDefault
+            expandErrorsByDefault = options.expandErrorsByDefault
+            expandNetworkByDefault = options.expandNetworkByDefault
             clearOnAppLaunch = options.clearOnAppLaunch
             showTime = LogColumn.TIME in options.visibleColumns
             showProcess = LogColumn.PROCESS in options.visibleColumns
@@ -1623,6 +1622,8 @@ class LogcatViewModel(
                 colorizeTags = saved.colorizeTags,
                 copyMessageOnly = saved.copyMessageOnly,
                 expandJsonByDefault = saved.expandJsonByDefault,
+                expandErrorsByDefault = saved.expandErrorsByDefault,
+                expandNetworkByDefault = saved.expandNetworkByDefault,
                 clearOnAppLaunch = saved.clearOnAppLaunch,
                 visibleColumns = columns,
                 columnWidths = mapOf(

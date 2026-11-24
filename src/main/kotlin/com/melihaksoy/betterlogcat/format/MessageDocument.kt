@@ -18,6 +18,17 @@ object MessageDocument {
         }
     }
 
+    /**
+     * The JSON body alone, pretty printed: no status line, headers or `BODY START` markers, and no fold
+     * arrows. A body the logger cut off comes back as logged. Null when the message has no JSON body.
+     * A body starts its own line: a JSON value inside a header line (`-> nel: {...}`) does not count.
+     */
+    fun body(entry: LogEntry): String? {
+        val json = entry.json as? JsonContent.Found ?: return null
+        if (json.prefix.substringAfterLast(delimiter = '\n').isNotBlank()) return null
+        return if (json.main.isComplete) json.pretty else json.raw
+    }
+
     /** True when the document is only JSON, so an editor can highlight it as JSON. */
     fun isPureJson(entry: LogEntry): Boolean {
         val json = entry.json as? JsonContent.Found ?: return false

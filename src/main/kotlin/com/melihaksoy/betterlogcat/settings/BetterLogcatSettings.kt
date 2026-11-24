@@ -60,6 +60,8 @@ class BetterLogcatSettings : SimplePersistentStateComponent<BetterLogcatSettings
         var colorizeTags by property(defaultValue = true)
         var copyMessageOnly by property(defaultValue = true)
         var expandJsonByDefault by property(defaultValue = false)
+        var expandErrorsByDefault by property(defaultValue = true)
+        var expandNetworkByDefault by property(defaultValue = false)
 
         var showTime by property(defaultValue = true)
         var showProcess by property(defaultValue = true)

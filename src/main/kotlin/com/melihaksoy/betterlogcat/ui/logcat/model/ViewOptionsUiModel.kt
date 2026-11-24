@@ -29,6 +29,10 @@ data class ViewOptionsUiModel(
     val copyMessageOnly: Boolean = true,
     /** JSON and long messages have their own default: big responses stay one compact row until expanded. */
     val expandJsonByDefault: Boolean = false,
+    /** Error and assert messages: stack traces show whole. Wins over the other expand defaults. */
+    val expandErrorsByDefault: Boolean = true,
+    /** HTTP requests and responses (Ktor, OkHttp). Wins over the JSON and multi-line defaults. */
+    val expandNetworkByDefault: Boolean = false,
     /** When the project app starts, the log starts over with it. */
     val clearOnAppLaunch: Boolean = false,
     val visibleColumns: Set<LogColumn> = LogColumn.entries.toSet(),
@@ -46,11 +50,27 @@ data class ViewOptionsUiModel(
         ViewToggle.COLORIZE_TAGS -> colorizeTags
         ViewToggle.COPY_MESSAGE_ONLY -> copyMessageOnly
         ViewToggle.EXPAND_JSON -> expandJsonByDefault
+        ViewToggle.EXPAND_MULTILINE -> expandByDefault
+        ViewToggle.EXPAND_ERRORS -> expandErrorsByDefault
+        ViewToggle.EXPAND_NETWORK -> expandNetworkByDefault
         ViewToggle.CLEAR_ON_APP_LAUNCH -> clearOnAppLaunch
     }
 
-    fun isExpandedByDefault(entry: LogEntry): Boolean =
-        if (entry.json is JsonContent.Found || entry.isLong) expandJsonByDefault else expandByDefault
+    /** First match wins: errors, then HTTP calls, then JSON and long messages, then other multi-line messages. */
+    fun isExpandedByDefault(entry: LogEntry): Boolean = when {
+        entry.isError -> expandErrorsByDefault
+        entry.http != null -> expandNetworkByDefault
+        entry.json is JsonContent.Found || entry.isLong -> expandJsonByDefault
+        else -> expandByDefault
+    }
+
+    /** Expand all / collapse all: every kind of message. */
+    fun withAllExpanded(isExpanded: Boolean): ViewOptionsUiModel = copy(
+        expandByDefault = isExpanded,
+        expandJsonByDefault = isExpanded,
+        expandErrorsByDefault = isExpanded,
+        expandNetworkByDefault = isExpanded,
+    )
 
     /**
      * Expand shows more of [entry]. Without soft wrap, one long line without JSON has nothing more to show:
@@ -85,6 +105,9 @@ data class ViewOptionsUiModel(
         ViewToggle.COLORIZE_TAGS -> copy(colorizeTags = isOn)
         ViewToggle.COPY_MESSAGE_ONLY -> copy(copyMessageOnly = isOn)
         ViewToggle.EXPAND_JSON -> copy(expandJsonByDefault = isOn)
+        ViewToggle.EXPAND_MULTILINE -> copy(expandByDefault = isOn)
+        ViewToggle.EXPAND_ERRORS -> copy(expandErrorsByDefault = isOn)
+        ViewToggle.EXPAND_NETWORK -> copy(expandNetworkByDefault = isOn)
         ViewToggle.CLEAR_ON_APP_LAUNCH -> copy(clearOnAppLaunch = isOn)
     }
 }

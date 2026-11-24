@@ -288,6 +288,14 @@ private fun CallHeader(
                     colors = colors,
                     onClick = { copyText(text = MessageDocument.text(entry = entry)) },
                 )
+                val body = remember(entry) { MessageDocument.body(entry = entry) }
+                if (body != null) {
+                    ActionChip(
+                        text = BetterLogcatBundle.message("network.copyBody"),
+                        colors = colors,
+                        onClick = { copyText(text = body) },
+                    )
+                }
                 ActionChip(
                     text = BetterLogcatBundle.message("menu.openInEditor"),
                     colors = colors,

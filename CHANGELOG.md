@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.14.0
+- Network details: **Copy body** copies only the JSON body, pretty printed. No status line, headers,
+  `BODY START` markers or fold arrows. Right-click a call in the Network panel for Copy Response Body.
+- View settings › Expanded by default: one default for each kind of message. Errors and crashes
+  (expanded by default), HTTP requests and responses, JSON and long messages, and other multi-line
+  messages. The first kind that fits a message wins. The defaults are kept across IDE restarts.
+- Expand all and Collapse all set every one of these defaults.
+- Built with Kotlin 2.4.21, IntelliJ Platform Gradle Plugin 2.20.1 and Gradle 9.9.2.
+
 ## 0.13.1
 - Fixed: in the Tags panel, "Move to group", "New group…" and "Remove from group" on a selection of tags
   moved only the tag you right-clicked. They now act on every selected tag, and the menu offers "Show only

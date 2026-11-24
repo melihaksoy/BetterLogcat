@@ -714,6 +714,10 @@ class IdeLogcatPopups(
         at: Point,
     ) {
         val group = DefaultActionGroup()
+        val response = state().entries.firstOrNull { it.id == call.responseEntryId }
+        response?.let { MessageDocument.body(entry = it) }?.let { body ->
+            group.add(action(text = BetterLogcatBundle.message("network.copyResponseBody")) { copyText(text = body) })
+        }
         group.add(action(text = BetterLogcatBundle.message("network.copyPath")) { copyText(text = call.path) })
         group.add(action(text = BetterLogcatBundle.message("network.copyUrl")) { copyText(text = call.url) })
         val request = state().entries.firstOrNull { it.id == call.requestEntryId }

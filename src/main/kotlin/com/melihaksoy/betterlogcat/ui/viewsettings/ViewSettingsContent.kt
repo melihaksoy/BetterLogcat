@@ -308,6 +308,23 @@ private fun MessageSection(
             isEnabled = true,
             onIntent = onIntent,
         )
+    }
+    // One default per kind of message. The first kind that fits a message wins, in this order.
+    Section(title = BetterLogcatBundle.message("viewPanel.expand")) {
+        ToggleCheckbox(
+            toggle = ViewToggle.EXPAND_ERRORS,
+            label = BetterLogcatBundle.message("view.expandErrors"),
+            viewOptions = viewOptions,
+            isEnabled = true,
+            onIntent = onIntent,
+        )
+        ToggleCheckbox(
+            toggle = ViewToggle.EXPAND_NETWORK,
+            label = BetterLogcatBundle.message("view.expandNetwork"),
+            viewOptions = viewOptions,
+            isEnabled = true,
+            onIntent = onIntent,
+        )
         ToggleCheckbox(
             toggle = ViewToggle.EXPAND_JSON,
             label = BetterLogcatBundle.message("view.expandJson"),
@@ -315,10 +332,12 @@ private fun MessageSection(
             isEnabled = true,
             onIntent = onIntent,
         )
-        CheckboxRow(
-            text = BetterLogcatBundle.message("view.expandByDefault"),
-            checked = viewOptions.expandByDefault,
-            onCheckedChange = { isOn -> onIntent(if (isOn) LogcatIntent.ExpandAll else LogcatIntent.CollapseAll) },
+        ToggleCheckbox(
+            toggle = ViewToggle.EXPAND_MULTILINE,
+            label = BetterLogcatBundle.message("view.expandByDefault"),
+            viewOptions = viewOptions,
+            isEnabled = true,
+            onIntent = onIntent,
         )
     }
 }
