@@ -178,6 +178,9 @@ sealed interface LogcatIntent {
 
     /** Deletes saved sessions that started before [epochMillis]. The live session stays. */
     data class DeleteProblemHistoryBefore(val epochMillis: Long) : LogcatIntent
+
+    /** Deletes every saved session and empties the live one. */
+    data object DeleteAllProblemSessions : LogcatIntent
     data class IgnoreProblem(val key: String) : LogcatIntent
     data object ResetIgnoredProblems : LogcatIntent
 

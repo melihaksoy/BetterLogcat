@@ -107,6 +107,10 @@ class ProblemHistoryStore : PersistentStateComponent<ProblemHistoryStore.History
         )
     }
 
+    fun deleteAll() {
+        _sessions.value = emptyList()
+    }
+
     fun deleteProblem(
         id: String,
         key: String,

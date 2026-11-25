@@ -150,7 +150,8 @@ internal fun LogToolbar(
             onToggle = { onIntent(LogcatIntent.ToggleSidePanel(panel = SidePanel.BOOKMARKS)) },
         )
         ToolbarToggleButton(
-            iconKey = AllIconsKeys.Toolwindows.ToolWindowProblems,
+            // The gutter's warning triangle, so the button looks like the rows it lists.
+            iconKey = AllIconsKeys.General.Warning,
             tooltip = BetterLogcatBundle.message("toolbar.problems"),
             isSelected = state.viewOptions.sidePanel == SidePanel.PROBLEMS,
             onToggle = { onIntent(LogcatIntent.ToggleSidePanel(panel = SidePanel.PROBLEMS)) },

@@ -22,6 +22,9 @@ import com.melihaksoy.betterlogcat.model.Device
 import com.melihaksoy.betterlogcat.model.DeviceState
 import com.melihaksoy.betterlogcat.model.LogEntry
 import com.melihaksoy.betterlogcat.model.LogLevel
+import com.melihaksoy.betterlogcat.model.ProblemKind
+import com.melihaksoy.betterlogcat.model.ProblemSession
+import com.melihaksoy.betterlogcat.model.SavedProblem
 import com.melihaksoy.betterlogcat.model.SavedLog
 import com.melihaksoy.betterlogcat.settings.BetterLogcatSettings
 import com.melihaksoy.betterlogcat.ui.logcat.LogcatIntent
@@ -39,6 +42,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.nio.file.Files
@@ -89,7 +93,8 @@ class LogcatViewModelTest : BasePlatformTestCase() {
                     requests += request
                     // Like the real stream: new ids start above the lines already in the log.
                     ids.accumulateAndGet(request.afterId, ::maxOf)
-                    return batches.receiveAsFlow().map { Either.Right(value = it) }
+                    // An empty batch ends the stream, like adb closing it.
+                    return batches.receiveAsFlow().takeWhile { it.isNotEmpty() }.map { Either.Right(value = it) }
                 }
             },
             observeProcesses = object : ObserveProcessesInteractor {
@@ -315,6 +320,109 @@ class LogcatViewModelTest : BasePlatformTestCase() {
         }
     }
 
+    fun `test a native crash counts once, not once per dump line`() {
+        send(
+            entry(tag = "libc", message = "Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 900 (example.hal)", level = LogLevel.ASSERT),
+            entry(tag = "DEBUG", message = "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***", level = LogLevel.ASSERT),
+            entry(tag = "DEBUG", message = "Cmdline: /vendor/bin/hw/example.hal", level = LogLevel.ASSERT),
+            entry(tag = "DEBUG", message = "pid: 900, tid: 900, name: example.hal", level = LogLevel.ASSERT),
+        )
+
+        assertEquals(1, await { it.entries.size == 4 }.crashCount)
+    }
+
+    fun `test delete all sessions empties the live session too`() {
+        val store = ProblemHistoryStore.getInstance(project = project)
+        store.save(session = savedSession(id = "earlier"))
+        send(entry(tag = "Garage", message = "Low memory", level = LogLevel.WARN))
+        await { it.problems.currentCount == 1 && it.problems.history.size == 1 }
+
+        viewModel.onIntent(LogcatIntent.DeleteAllProblemSessions)
+
+        val state = await { it.problems.currentCount == 0 && it.problems.history.isEmpty() }
+        assertEquals(0, state.problems.currentCount)
+        assertEquals(emptyList<ProblemSession>(), store.sessions.value)
+    }
+
+    fun `test a live session deleted from another pane does not come back`() {
+        val store = ProblemHistoryStore.getInstance(project = project)
+        send(entry(tag = "Garage", message = "Low memory", level = LogLevel.WARN))
+        val live = await { it.problems.currentCount == 1 }.problems.current!!
+        runBlocking { withTimeout(timeMillis = 5_000) { store.sessions.first { sessions -> sessions.any { it.id == live.id } } } }
+
+        // Another pane shares the store and deletes this pane's session.
+        store.delete(id = live.id)
+
+        assertEquals(0, await { it.problems.currentCount == 0 }.problems.currentCount)
+        runBlocking { delay(timeMillis = 2_500) }
+        assertTrue(store.sessions.value.none { it.id == live.id })
+    }
+
+    fun `test the stream starts again after adb ends it`() {
+        send(entry(tag = "Garage", message = "Before"))
+        val first = await { it.entries.size == 1 }.entries.single()
+
+        send()
+        runBlocking { withTimeout(timeMillis = 5_000) { while (requests.size < 2) delay(timeMillis = 20) } }
+
+        val again = requests.last()
+        assertEquals(first.id, again.afterId)
+        assertEquals(first.epochSeconds * 1_000_000_000L + first.nanos + 1, again.sinceEpochNanos)
+        send(entry(tag = "Garage", message = "After"))
+        assertEquals(listOf("Before", "After"), await { it.entries.size == 2 }.entries.map { it.message })
+    }
+
+    fun `test the crash badge counts only the current app`() {
+        send(
+            entry(tag = "libc", message = "Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 1822 (system_server)", level = LogLevel.ASSERT, pid = SYSTEM_PID),
+            entry(tag = "AndroidRuntime", message = "FATAL EXCEPTION: main\njava.lang.IllegalStateException: boom", level = LogLevel.ERROR),
+        )
+
+        val state = await { it.entries.size == 2 && it.problems.currentCount == 2 }
+        assertEquals(1, await { it.crashCount == 1 }.crashCount)
+        assertEquals(2, state.problems.currentCount)
+    }
+
+    fun `test deleting the crash problem takes it off the badge`() {
+        send(entry(tag = "AndroidRuntime", message = "FATAL EXCEPTION: main\njava.lang.IllegalStateException: boom", level = LogLevel.ERROR))
+        val state = await { it.crashCount == 1 && it.problems.currentCount == 1 }
+        val live = state.problems.current!!
+
+        viewModel.onIntent(
+            LogcatIntent.DeleteProblem(
+                sessionId = live.id,
+                key = live.problems.single().key,
+            ),
+        )
+
+        assertEquals(0, await { it.crashCount == 0 }.crashCount)
+        assertEquals(1, viewModel.state.value.entries.size)
+    }
+
+    private fun savedSession(id: String) = ProblemSession(
+        id = id,
+        title = "Earlier run",
+        deviceSerial = DEVICE.serial,
+        startedEpochMillis = 1_000L,
+        problems = listOf(
+            SavedProblem(
+                key = "warning:Garage",
+                kind = ProblemKind.WARNING,
+                title = "Low memory",
+                detail = "",
+                tag = "Garage",
+                count = 1,
+                firstEpochMillis = 1_000L,
+                lastEpochMillis = 1_000L,
+                level = LogLevel.WARN,
+                pid = APP_PID,
+                tid = APP_PID,
+                processName = APP,
+                sample = "Low memory",
+            ),
+        ),
+    )
+
     private fun send(vararg entries: LogEntry) {
         batches.trySend(element = entries.toList())
     }
@@ -327,12 +435,13 @@ class LogcatViewModelTest : BasePlatformTestCase() {
         tag: String,
         message: String,
         level: LogLevel = LogLevel.INFO,
+        pid: Int = APP_PID,
     ) = LogEntry(
         id = ids.incrementAndGet(),
         epochSeconds = 1_791_540_000L,
         nanos = ids.get().toInt(),
-        pid = APP_PID,
-        tid = APP_PID,
+        pid = pid,
+        tid = pid,
         level = level,
         tag = tag,
         message = message,

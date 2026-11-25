@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.14.2
+- Crash badge on the tab and the status line: it counts only crashes of the current app (the app you
+  launched last) that are still in the log. Crashes of system services and other apps no longer count.
+  Clear, a deleted or ignored crash in the Problems panel, and Delete All Sessions take crashes off
+  the badge. A click jumps to the latest crash of the app.
+- Fixed: the crash badge counted every line of a native crash dump. One native crash writes about 50
+  fatal `DEBUG` lines, so a system service in a crash loop gave a count in the tens of thousands. Each
+  native crash now counts once.
+- Fixed: Problems › Delete Sessions Older Than… and Delete All did nothing when the only saved session was
+  the live one. **Delete All Sessions** now also empties the live session. An option with no session to
+  delete is greyed out.
+- Fixed: a session deleted from one pane came back when the pane that recorded it saved it again. That
+  pane now empties its live session.
+- Fixed: when adb ended the log stream while the device stayed online, the pane stopped getting lines
+  until the app or the IDE restarted. The stream now starts again after the last line it got.
+- The Problems panel button shows the warning triangle, like the gutter.
+
 ## 0.14.1
 - Ready for Android Studio 2026.3: the plugin declares its dependency on the Compose plugin, which
   Studio 2026.3 ships apart from the platform.

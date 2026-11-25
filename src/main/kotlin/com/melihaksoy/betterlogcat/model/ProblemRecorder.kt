@@ -71,6 +71,11 @@ class ProblemRecorder {
     /** Ids of [key]'s lines, oldest first. Lines trimmed from the log may be among them. */
     fun liveIds(key: String): List<Long> = liveIds[key]?.toList().orEmpty()
 
+    /** Ids of the lines of every crash problem. Lines trimmed from the log may be among them. */
+    fun crashIds(): List<Long> = problems.values
+        .filter { it.kind == ProblemKind.CRASH }
+        .flatMap { liveIds[it.key].orEmpty() }
+
     fun frameSkips(): List<FrameSkip> = frameSkips.toList()
 
     fun remove(key: String) {

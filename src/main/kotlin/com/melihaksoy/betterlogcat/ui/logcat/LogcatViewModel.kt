@@ -70,6 +70,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
@@ -79,7 +80,6 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
@@ -165,6 +165,9 @@ class LogcatViewModel(
     private var lastProblemsPublish = 0L
     private var lastHistorySave = 0L
     private var isHistoryDirty = false
+
+    /** The live session is in the history. When it goes from there (another pane deleted it), its problems go too. */
+    private var isSessionSaved = false
     private var lastCrashNotice = 0L
 
     /** The project's bookmarks, and the id of each one's line in this buffer. Buffer thread only. */
@@ -231,6 +234,7 @@ class LogcatViewModel(
         problemHistoryStore.sessions
             .onEach { sessions ->
                 savedSessions = sessions
+                if (isSessionSaved && sessions.none { it.id == session.id }) forgetLiveProblems()
                 publishProblems()
             }
             .launchIn(scope = workScope)
@@ -285,7 +289,7 @@ class LogcatViewModel(
             is LogcatIntent.ToggleBookmark -> workScope.launch { toggleBookmark(id = intent.id) }
             is LogcatIntent.RemoveBookmark -> bookmarkStore.remove(key = intent.key)
             is LogcatIntent.JumpToBookmark -> jumpToBookmark(delta = intent.delta)
-            LogcatIntent.JumpToCrash -> jumpToCrash()
+            LogcatIntent.JumpToCrash -> workScope.launch { jumpToCrash() }
             is LogcatIntent.JumpToEntry -> jumpToEntry(id = intent.id)
             is LogcatIntent.CopyEntry -> copyEntries(
                 entries = _state.value.entries.filter { it.id == intent.id },
@@ -422,6 +426,11 @@ class LogcatViewModel(
                 cutoffEpochMillis = intent.epochMillis,
                 keepId = session.id,
             )
+            LogcatIntent.DeleteAllProblemSessions -> workScope.launch {
+                forgetLiveProblems()
+                problemHistoryStore.deleteAll()
+                publishProblems()
+            }
             is LogcatIntent.IgnoreProblem -> workScope.launch {
                 recorder.remove(key = intent.key)
                 problemHistoryStore.ignore(key = intent.key)
@@ -513,28 +522,19 @@ class LogcatViewModel(
             )
         }
         val generation = ++streamGeneration
-        val last = withContext(context = bufferDispatcher) { buffer.lastEntry }
-        val since = when {
-            last != null -> last.epochSeconds * NANOS_PER_SECOND + last.nanos + 1
-            settings.state.loadExistingBuffer -> 0L
-            else -> -1L
-        }
-        streamJob = streamLogcat(
-            request = LogcatRequest(
-                serial = serial,
-                sinceEpochNanos = since,
-                afterId = last?.id ?: 0L,
-            ),
-        )
-            .mapEither(
-                onLeft = { refreshContent() },
-                onRight = { batch -> withContext(context = bufferDispatcher) { onBatch(received = batch) } },
-            )
-            .onCompletion {
+        streamJob = workScope.launch {
+            try {
+                // adb can end the stream while the device stays online. Start it again after the last line.
+                while (true) {
+                    streamOnce(serial = serial)
+                    if (_state.value.devices.none { it.serial == serial && it.state == DeviceState.ONLINE }) break
+                    delay(duration = STREAM_RESTART_DELAY)
+                }
+            } finally {
                 if (generation == streamGeneration) streamingSerial = ""
                 refreshContent()
             }
-            .launchIn(scope = workScope)
+        }
         processJob = observeProcesses(
             serial = serial,
             refreshRequests = processRefresh,
@@ -545,6 +545,28 @@ class LogcatViewModel(
             )
             .launchIn(scope = workScope)
         refreshContent()
+    }
+
+    /** Streams [serial] from after the last line in the buffer until adb ends the stream. */
+    private suspend fun streamOnce(serial: String) {
+        val last = buffer.lastEntry
+        val since = when {
+            last != null -> last.epochSeconds * NANOS_PER_SECOND + last.nanos + 1
+            settings.state.loadExistingBuffer -> 0L
+            else -> -1L
+        }
+        streamLogcat(
+            request = LogcatRequest(
+                serial = serial,
+                sinceEpochNanos = since,
+                afterId = last?.id ?: 0L,
+            ),
+        )
+            .mapEither(
+                onLeft = { refreshContent() },
+                onRight = { batch -> onBatch(received = batch) },
+            )
+            .collect()
     }
 
     private fun stopStreaming() {
@@ -610,13 +632,10 @@ class LogcatViewModel(
             }
             if (isFound) publishBookmarks()
         }
-        var crashes = 0
         for (entry in batch) {
             if (networkTracker.onEntry(entry = entry)) isNetworkDirty = true
-            if (entry.isCrash) crashes++
             if (!isRestored) recordProblem(entry = entry)
         }
-        if (crashes > 0) _state.update { it.copy(crashCount = it.crashCount + crashes) }
         val names = _state.value.processNames
         for (entry in batch) {
             if (entry.pid !in names && requestedPids.add(entry.pid)) {
@@ -684,6 +703,8 @@ class LogcatViewModel(
         val now = System.currentTimeMillis()
         val rates = if (now - lastRatesPublish >= RATES_INTERVAL_MILLIS) buffer.tagRatesSnapshot() else null
         if (rates != null) lastRatesPublish = now
+        // Lines trimmed from the log take their crashes off the badge.
+        val crashes = if (rates != null) appCrashIds().size else null
         _state.update {
             it.copy(
                 entries = entries,
@@ -693,6 +714,7 @@ class LogcatViewModel(
                 tagPids = tagPids,
                 networkCalls = calls ?: it.networkCalls,
                 tagRates = rates ?: it.tagRates,
+                crashCount = crashes ?: it.crashCount,
             )
         }
     }
@@ -721,6 +743,7 @@ class LogcatViewModel(
     ) {
         saveSession()
         recorder.clear()
+        isSessionSaved = false
         sessionSkipUntil = ProblemHistory.savedUntil(
             sessions = savedSessions,
             deviceSerial = serial,
@@ -787,12 +810,31 @@ class LogcatViewModel(
         )
     }
 
+    /**
+     * Crash lines of the current app that are still in the log, oldest first. They come from the live
+     * session's crash problems, so Clear, a deleted or ignored problem and Delete All take them off the badge.
+     * A native crash dump writes about 50 fatal DEBUG lines; libc's "Fatal signal" line counts it once.
+     * With no project app known, crashes of every app count.
+     */
+    private fun appCrashIds(): List<Long> {
+        val apps = _state.value.currentAppId?.let { setOf(it) } ?: _state.value.projectAppIds
+        val names = _state.value.processNames
+        return recorder.crashIds()
+            .filter { id ->
+                val entry = buffer.find(id = id) ?: return@filter false
+                entry.tag != NATIVE_DEBUG_TAG && (apps.isEmpty() || names[entry.pid].orEmpty().substringBefore(':') in apps)
+            }
+            .sorted()
+    }
+
     private fun publishProblems() {
         lastProblemsPublish = System.currentTimeMillis()
         session = session.copy(problems = recorder.snapshot())
         val current = session
+        val crashes = appCrashIds().size
         _state.update {
             it.copy(
+                crashCount = crashes,
                 problems = ProblemsUiModel(
                     current = current,
                     history = savedSessions.filter { saved -> saved.id != current.id },
@@ -808,7 +850,17 @@ class LogcatViewModel(
         isHistoryDirty = false
         lastHistorySave = System.currentTimeMillis()
         if (_state.value.openedFileName.isNotEmpty()) return
-        problemHistoryStore.save(session = session.copy(problems = recorder.snapshot()))
+        val problems = recorder.snapshot()
+        problemHistoryStore.save(session = session.copy(problems = problems))
+        // The store keeps no session without problems.
+        isSessionSaved = problems.isNotEmpty()
+    }
+
+    /** Empties the live session and keeps it out of the history until it records a new problem. */
+    private fun forgetLiveProblems() {
+        recorder.clear()
+        isHistoryDirty = false
+        isSessionSaved = false
     }
 
     private fun jumpToProblem(
@@ -933,6 +985,7 @@ class LogcatViewModel(
             stopStreaming()
             clearLog()
             recorder.clear()
+            isSessionSaved = false
             sessionSkipUntil = Long.MIN_VALUE
             session = session.copy(
                 id = UUID.randomUUID().toString(),
@@ -1508,11 +1561,13 @@ class LogcatViewModel(
     }
 
     private fun jumpToCrash() {
-        val crash = _state.value.entries.lastOrNull { it.isCrash }
+        // The badge counts crashes of the current app, so jump to the latest of those.
+        val visible = _state.value.entries.mapTo(HashSet()) { it.id }
+        val crash = appCrashIds().lastOrNull { it in visible }
         if (crash == null) {
             showStatus(message = BetterLogcatBundle.message("status.crashHidden"))
         } else {
-            jumpToEntry(id = crash.id)
+            jumpToEntry(id = crash)
         }
     }
 
@@ -1647,6 +1702,7 @@ class LogcatViewModel(
         val FILTER_DEBOUNCE = 120.milliseconds
         val HISTORY_DEBOUNCE = 3.seconds
         val AGE_REFRESH = 5.seconds
+        val STREAM_RESTART_DELAY = 1.seconds
         const val RATES_INTERVAL_MILLIS = 1_000L
         const val PROBLEMS_INTERVAL_MILLIS = 500L
         const val HISTORY_SAVE_INTERVAL_MILLIS = 2_000L

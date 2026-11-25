@@ -676,15 +676,27 @@ class IdeLogcatPopups(
     override fun showProblemsPanelMenu(at: Point) {
         val group = DefaultActionGroup()
         val now = System.currentTimeMillis()
+        val problems = state().problems
         listOf(1, 7, 30).forEach { days ->
+            val cutoff = now - TimeUnit.DAYS.toMillis(days.toLong())
             group.add(
-                action(text = BetterLogcatBundle.message("problems.menu.deleteOlder", days)) {
-                    onIntent(LogcatIntent.DeleteProblemHistoryBefore(epochMillis = now - TimeUnit.DAYS.toMillis(days.toLong())))
+                action(
+                    text = BetterLogcatBundle.message("problems.menu.deleteOlder", days),
+                    isEnabled = problems.history.any { it.startedEpochMillis < cutoff },
+                ) {
+                    onIntent(LogcatIntent.DeleteProblemHistoryBefore(epochMillis = cutoff))
                 },
             )
         }
-        group.add(action(text = BetterLogcatBundle.message("problems.menu.deleteAll")) { onIntent(LogcatIntent.DeleteProblemHistoryBefore(epochMillis = Long.MAX_VALUE)) })
-        val ignored = state().problems.ignoredCount
+        group.add(
+            action(
+                text = BetterLogcatBundle.message("problems.menu.deleteAll"),
+                isEnabled = problems.history.isNotEmpty() || problems.currentCount > 0,
+            ) {
+                onIntent(LogcatIntent.DeleteAllProblemSessions)
+            },
+        )
+        val ignored = problems.ignoredCount
         if (ignored > 0) {
             group.addSeparator()
             group.add(action(text = BetterLogcatBundle.message("problems.menu.resetIgnored", ignored)) { onIntent(LogcatIntent.ResetIgnoredProblems) })
@@ -933,9 +945,12 @@ class IdeLogcatPopups(
     private fun action(
         text: String,
         shortcutFrom: String = "",
+        isEnabled: Boolean = true,
         onClick: () -> Unit,
     ): AnAction {
         val action = DumbAwareAction.create(text) { onClick() }
+        // The menu shows a disabled item greyed out.
+        action.templatePresentation.isEnabled = isEnabled
         if (shortcutFrom.isNotEmpty()) {
             ActionManager.getInstance().getAction(shortcutFrom)?.let { action.copyShortcutFrom(it) }
         }
